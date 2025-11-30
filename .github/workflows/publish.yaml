@@ -7,6 +7,8 @@ on:
 
 jobs:
   release:
+    concurrency:
+      group: release
     permissions:
       contents: write
       packages: write
@@ -14,6 +16,9 @@ jobs:
     steps:
       - name: checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
       - name: set up qemu
         uses: docker/setup-qemu-action@v3
       - name: set up docker buildx
