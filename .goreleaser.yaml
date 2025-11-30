@@ -16,5 +16,9 @@ dockers_v2:
       - linux/amd64
       - linux/arm64
 
+release:
+  footer: |
+    Docker images are available at: `ghcr.io/benfiola/homelab-helper:{{ .Version }}`.
+
 changelog:
   use: github-native
