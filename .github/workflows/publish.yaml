@@ -28,6 +28,7 @@ jobs:
         run: |
           sudo BIN=/usr/local/bin make install-tools
       - name: determine version
+        id: version
         run: |
           BRANCH_NAME="${GITHUB_REF#refs/heads/}"
           BRANCH_NAME="$(echo "${BRANCH_NAME}" | sed 's/[^a-zA-Z0-9.-]/-/g')"
@@ -43,8 +44,8 @@ jobs:
         run: |
           git config user.name github-actions
           git config user.email github-actions@github.com
-          git tag ${{ steps.version.outputs.version }}
-          git push origin ${{ steps.version.outputs.version }}
+          git tag "${{ steps.version.outputs.version }}"
+          git push origin "${{ steps.version.outputs.version }}"
       - name: run goreleaser
         uses: goreleaser/goreleaser-action@v5
         with:
