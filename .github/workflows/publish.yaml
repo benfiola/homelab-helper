@@ -26,7 +26,7 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: install tools
         run: |
-          BIN=/usr/local/bin make install-tools
+          sudo BIN=/usr/local/bin make install-tools
       - name: determine version
         run: |
           BRANCH_NAME="${GITHUB_REF#refs/heads/}"
