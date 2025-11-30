@@ -18,7 +18,7 @@ dockers_v2:
 
 release:
   footer: |
-    **Docker image:** `ghcr.io/benfiola/homelab-helper:{{ .Version }}`
+    **Docker Image:** `ghcr.io/benfiola/homelab-helper:{{ .Version }}`
 
 changelog:
   use: github-native
