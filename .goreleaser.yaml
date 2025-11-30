@@ -18,7 +18,7 @@ dockers_v2:
 
 release:
   footer: |
-    Docker images are available at: `ghcr.io/benfiola/homelab-helper:{{ .Version }}`.
+    **Docker image:** `ghcr.io/benfiola/homelab-helper:{{ .Version }}`
 
 changelog:
   use: github-native
