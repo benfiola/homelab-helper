@@ -15,7 +15,7 @@ FROM alpine:${ALPINE_VERSION}
 
 RUN <<EOF
 apk update
-apk add curl jq kubectl
+apk add curl jq kubectl lvm2 parted 
 EOF
 
 COPY --from=vault_builder /usr/bin/vault /usr/bin/vault
