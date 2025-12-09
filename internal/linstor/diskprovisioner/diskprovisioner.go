@@ -3,6 +3,7 @@ package diskprovisioner
 import (
 	"context"
 	"fmt"
+	"os"
 	"path/filepath"
 
 	"github.com/benfiola/homelab-helper/internal/logging"
@@ -64,9 +65,12 @@ func (p *DiskProvisioner) Provision(ctx context.Context) error {
 
 	logger.Info("resolving symlink", "partition-label", p.PartitionLabel)
 	symlink := fmt.Sprintf("/dev/disk/by-partlabel/%s", p.PartitionLabel)
-	pv, err := filepath.EvalSymlinks(symlink)
+	pv, err := os.Readlink(symlink)
 	if err != nil {
 		return err
+	}
+	if !filepath.IsAbs(pv) {
+		pv = filepath.Join(symlink, pv)
 	}
 	if pv == symlink {
 		return fmt.Errorf("could not resolve device symlink '%s", symlink)
