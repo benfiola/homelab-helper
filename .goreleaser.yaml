@@ -16,7 +16,7 @@ builds:
 dockers_v2:
   - dockerfile: .goreleaser.Dockerfile
     images:
-      - ghcr.io/benfiola/{{ .ProjectName }}]
+      - ghcr.io/benfiola/{{ .ProjectName }}
     platforms:
       - linux/amd64
       - linux/arm64

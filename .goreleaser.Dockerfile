@@ -4,7 +4,7 @@ FROM alpine:${ALPINE_VERSION} as homelab_helper_builder
 
 ARG TARGETPLATFORM
 
-COPY $TARGETPLATFORM/myprogram /usr/bin/
+COPY $TARGETPLATFORM/homelab-helper /usr/bin/
 
 FROM alpine:${ALPINE_VERSION} AS vault_builder
 
