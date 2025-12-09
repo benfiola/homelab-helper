@@ -63,16 +63,17 @@ func (u *Unsealer) Unseal(ctx context.Context) error {
 	}
 
 	logger.Info("wait for vault connectivity", "address", u.Client.Address)
-	unsealed := false
+	sealed := false
 	for {
 		status, err := u.Client.Status(ctx)
 		if err == nil {
-			unsealed = status.Unsealed
+			sealed = status.Sealed
 			break
 		}
+		logger.Debug("vault status command failed", "error", err)
 		time.Sleep(1 * time.Second)
 	}
-	if unsealed {
+	if !sealed {
 		logger.Info("vault is already unsealed")
 		return nil
 	}

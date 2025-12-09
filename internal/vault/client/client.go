@@ -30,12 +30,12 @@ func New(opts *Opts) (*Client, error) {
 }
 
 type Status struct {
-	Initialized bool
-	Unsealed    bool
+	Initialized bool `json:"initialized"`
+	Sealed      bool `json:"sealed"`
 }
 
 func (c *Client) Status(ctx context.Context) (*Status, error) {
-	output, err := process.Output(ctx, "vault", "status", fmt.Sprintf("--address=%s", c.Address), "--format=json")
+	output, err := process.Output(ctx, "vault", "status", fmt.Sprintf("-address=%s", c.Address), "-format=json")
 	if eerr, ok := err.(*exec.ExitError); ok {
 		if eerr.ExitCode() == 2 {
 			err = nil
@@ -55,7 +55,7 @@ func (c *Client) Status(ctx context.Context) (*Status, error) {
 }
 
 func (c *Client) Unseal(ctx context.Context, key string) error {
-	_, err := process.Output(ctx, "vault", "operator", "unseal", fmt.Sprintf("--address=%s", c.Address), key)
+	_, err := process.Output(ctx, "vault", "operator", "unseal", fmt.Sprintf("-address=%s", c.Address), key)
 	if err != nil {
 		return err
 	}
