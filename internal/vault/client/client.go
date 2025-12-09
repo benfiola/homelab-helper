@@ -3,6 +3,8 @@ package client
 import (
 	"context"
 	"encoding/json"
+	"fmt"
+	"os/exec"
 
 	"github.com/benfiola/homelab-helper/internal/process"
 )
@@ -33,7 +35,12 @@ type Status struct {
 }
 
 func (c *Client) Status(ctx context.Context) (*Status, error) {
-	output, err := process.Output(ctx, "vault", "status", "--format=json")
+	output, err := process.Output(ctx, "vault", "status", fmt.Sprintf("--address=%s", c.Address), "--format=json")
+	if eerr, ok := err.(*exec.ExitError); ok {
+		if eerr.ExitCode() == 2 {
+			err = nil
+		}
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -48,7 +55,7 @@ func (c *Client) Status(ctx context.Context) (*Status, error) {
 }
 
 func (c *Client) Unseal(ctx context.Context, key string) error {
-	_, err := process.Output(ctx, "vault", "operator", "unseal", key)
+	_, err := process.Output(ctx, "vault", "operator", "unseal", fmt.Sprintf("--address=%s", c.Address), key)
 	if err != nil {
 		return err
 	}
