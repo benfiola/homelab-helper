@@ -86,7 +86,7 @@ type ThinLV struct {
 	ChunkSize string
 	LV        string
 	Size      string
-	Zero      bool
+	Zero      *bool
 }
 
 type Options struct {
@@ -115,15 +115,28 @@ func (c *Client) CreateLV(ctx context.Context, name string, opts ...Option) erro
 
 	if options.ThinLV != nil {
 		t := options.ThinLV
-		zeroStr := "n"
-		if t.Zero {
-			zeroStr = "y"
-		}
+
 		size := t.Size
 		if size == "" {
 			size = "100%FREE"
 		}
-		command = append(command, "--extents", size, "--thin", t.LV, "--zero", zeroStr, "--chunksize", t.ChunkSize)
+
+		var zeroStr string
+		if t.Zero != nil {
+			if *t.Zero {
+				zeroStr = "y"
+			} else {
+				zeroStr = "n"
+			}
+		}
+
+		command = append(command, "--extents", size, "--thin", t.LV)
+		if t.ChunkSize != "" {
+			command = append(command, "--chunksize", t.ChunkSize)
+		}
+		if zeroStr != "" {
+			command = append(command, "--zero", zeroStr)
+		}
 	} else {
 		return fmt.Errorf("unimplemented")
 	}
