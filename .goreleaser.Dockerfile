@@ -1,4 +1,11 @@
 ARG ALPINE_VERSION=3.22.2
+
+FROM alpine:${ALPINE_VERSION} as homelab_helper_builder
+
+ARG TARGETPLATFORM
+
+COPY $TARGETPLATFORM/myprogram /usr/bin/
+
 FROM alpine:${ALPINE_VERSION} AS vault_builder
 
 ARG TARGETARCH
@@ -18,4 +25,5 @@ apk update
 apk add curl jq kubectl lvm2 parted 
 EOF
 
+COPY --from=homelab_helper_builder /usr/bin/homelab-helper /usr/bin/homelab-helper
 COPY --from=vault_builder /usr/bin/vault /usr/bin/vault

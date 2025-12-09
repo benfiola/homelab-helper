@@ -3,18 +3,25 @@ version: 2
 project_name: homelab-helper
 
 builds:
-  - skip: true
-    # the default builder (go) creates dependencies on the go toolchain even when the build step is skipped
-    builder: rust
+  - id: homelab-helper
+    goos:
+      - linux
+    goarch:
+      - arm64
+      - amd64
+    ldflags:
+      - "-X {{ .ModulePath }}/internal/info.Version={{ .Version }}"
+    main: ./cmd/homelab-helper
 
 dockers_v2:
-  - images:
-      - ghcr.io/benfiola/{{ .ProjectName }}
-    tags:
-      - "{{.Version}}"
+  - dockerfile: .goreleaser.Dockerfile
+    images:
+      - ghcr.io/benfiola/{{ .ProjectName }}]
     platforms:
       - linux/amd64
       - linux/arm64
+    tags:
+      - "{{.Version}}"
 
 release:
   footer: |
