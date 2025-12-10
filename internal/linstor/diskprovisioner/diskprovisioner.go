@@ -4,7 +4,9 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"os/signal"
 	"path/filepath"
+	"syscall"
 
 	"github.com/benfiola/homelab-helper/internal/logging"
 	"github.com/benfiola/homelab-helper/internal/lvm2"
@@ -118,7 +120,9 @@ func (p *DiskProvisioner) Provision(ctx context.Context) error {
 	p.Client.ExtendLV(ctx, lv, "")
 
 	if p.RunForever {
-		select {}
+		signalChannel := make(chan os.Signal, 1)
+		signal.Notify(signalChannel, syscall.SIGTERM, syscall.SIGINT)
+		<-signalChannel
 	}
 
 	return nil

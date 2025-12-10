@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
 	"github.com/benfiola/homelab-helper/internal/logging"
@@ -87,7 +89,9 @@ func (u *Unsealer) Unseal(ctx context.Context) error {
 	logger.Info("vault unsealed", "address", u.Client.Address)
 
 	if u.RunForever {
-		select {}
+		signalChannel := make(chan os.Signal, 1)
+		signal.Notify(signalChannel, syscall.SIGTERM, syscall.SIGINT)
+		<-signalChannel
 	}
 
 	return nil
