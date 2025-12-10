@@ -71,9 +71,7 @@ func (p *DiskProvisioner) Provision(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	if !filepath.IsAbs(pv) {
-		pv = filepath.Join(symlink, pv)
-	}
+	pv = filepath.Join(filepath.Dir(symlink), pv)
 	if pv == symlink {
 		return fmt.Errorf("could not resolve device symlink '%s", symlink)
 	}
