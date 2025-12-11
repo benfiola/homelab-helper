@@ -53,6 +53,15 @@ func (u *Unsealer) Unseal(ctx context.Context) error {
 	logger := logging.FromContext(ctx)
 	logger.Info("unsealing vault")
 
+	finish := func() error {
+		if u.RunForever {
+			signalChannel := make(chan os.Signal, 1)
+			signal.Notify(signalChannel, syscall.SIGTERM, syscall.SIGINT)
+			<-signalChannel
+		}
+		return nil
+	}
+
 	var unsealKey string
 	logger.Info("waiting for unseal key", "unseal-key", u.UnsealKeyPath)
 	for {
@@ -77,7 +86,7 @@ func (u *Unsealer) Unseal(ctx context.Context) error {
 	}
 	if !sealed {
 		logger.Info("vault is already unsealed")
-		return nil
+		return finish()
 	}
 
 	logger.Info("unsealing vault", "address", u.Client.Address)
@@ -87,12 +96,5 @@ func (u *Unsealer) Unseal(ctx context.Context) error {
 	}
 
 	logger.Info("vault unsealed", "address", u.Client.Address)
-
-	if u.RunForever {
-		signalChannel := make(chan os.Signal, 1)
-		signal.Notify(signalChannel, syscall.SIGTERM, syscall.SIGINT)
-		<-signalChannel
-	}
-
-	return nil
+	return finish()
 }
