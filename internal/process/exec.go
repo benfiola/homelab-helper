@@ -13,9 +13,6 @@ func Output(ctx context.Context, command ...string) (string, error) {
 
 	cmd := exec.CommandContext(ctx, command[0], command[1:]...)
 	outputBytes, err := cmd.Output()
-	if err != nil {
-		return "", err
-	}
 	output := string(outputBytes)
-	return output, nil
+	return output, err
 }
