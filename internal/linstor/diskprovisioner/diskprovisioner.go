@@ -104,11 +104,11 @@ func (p *DiskProvisioner) Provision(ctx context.Context) error {
 	_, err = p.Client.DisplayLV(ctx, lv)
 	if err != nil {
 		logger.Info("creating logical volume", "logical-volume", lv)
-		err = p.Client.CreateLV(ctx, lv, lvm2.WithThinLV(&lvm2.ThinLV{
+		err = p.Client.CreateLV(ctx, lvm2.ThinLV{
 			ChunkSize: "512K",
 			LV:        lv,
 			Zero:      ptr.Get(false),
-		}))
+		})
 		if err != nil {
 			return err
 		}

@@ -8,6 +8,7 @@ import (
 	"github.com/benfiola/homelab-helper/internal/info"
 	"github.com/benfiola/homelab-helper/internal/linstor/diskprovisioner"
 	"github.com/benfiola/homelab-helper/internal/logging"
+	"github.com/benfiola/homelab-helper/internal/vault/initialize"
 	"github.com/benfiola/homelab-helper/internal/vault/push"
 	"github.com/benfiola/homelab-helper/internal/vault/unseal"
 	"github.com/urfave/cli/v3"
@@ -65,6 +66,47 @@ func main() {
 					}
 
 					return provisioner.Provision(ctx)
+				},
+			},
+			{
+				Name: "vault-init",
+				Flags: []cli.Flag{
+					&cli.StringFlag{
+						Name:    "address",
+						Sources: cli.EnvVars("ADDRESS"),
+					},
+					&cli.StringFlag{
+						Name:     "secrets-mount",
+						Required: true,
+						Sources:  cli.EnvVars("SECRETS_MOUNT"),
+					},
+					&cli.StringFlag{
+						Name:     "token",
+						Required: true,
+						Sources:  cli.EnvVars("TOKEN"),
+					},
+					&cli.StringSliceFlag{
+						Name:     "roles",
+						Required: true,
+						Sources:  cli.EnvVars("ROLES"),
+					},
+				},
+				Action: func(ctx context.Context, c *cli.Command) error {
+					address := c.String("address")
+					roles := c.StringSlice("roles")
+					secretsMount := c.String("secrets-mount")
+					token := c.String("token")
+
+					initializer, err := initialize.New(&initialize.Opts{
+						Address:      address,
+						Roles:        roles,
+						SecretsMount: secretsMount,
+						Token:        token,
+					})
+					if err != nil {
+						return err
+					}
+					return initializer.Initialize(ctx)
 				},
 			},
 			{

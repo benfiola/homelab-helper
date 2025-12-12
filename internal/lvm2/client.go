@@ -20,7 +20,7 @@ func New(opts *Opts) (*Client, error) {
 }
 
 func (c *Client) CreatePV(ctx context.Context, device string) error {
-	_, err := process.Output(ctx, "pvcreate", device)
+	_, err := process.Output(ctx, []string{"pvcreate", device})
 	if err != nil {
 		return err
 	}
@@ -32,7 +32,7 @@ type PVInfo struct {
 }
 
 func (c *Client) DisplayPV(ctx context.Context, device string) (*PVInfo, error) {
-	output, err := process.Output(ctx, "pvdisplay", "--reportformat=json", device)
+	output, err := process.Output(ctx, []string{"pvdisplay", "--reportformat=json", device})
 	if err != nil {
 		return nil, err
 	}
@@ -47,7 +47,7 @@ func (c *Client) DisplayPV(ctx context.Context, device string) (*PVInfo, error) 
 }
 
 func (c *Client) ResizePV(ctx context.Context, device string) error {
-	_, err := process.Output(ctx, "pvresize", device)
+	_, err := process.Output(ctx, []string{"pvresize", device})
 	if err != nil {
 		return err
 	}
@@ -56,7 +56,7 @@ func (c *Client) ResizePV(ctx context.Context, device string) error {
 }
 
 func (c *Client) CreateVG(ctx context.Context, name string, device string) error {
-	_, err := process.Output(ctx, "vgcreate", name, device)
+	_, err := process.Output(ctx, []string{"vgcreate", name, device})
 	if err != nil {
 		return err
 	}
@@ -68,7 +68,7 @@ type VGInfo struct {
 }
 
 func (c *Client) DisplayVG(ctx context.Context, name string) (*VGInfo, error) {
-	output, err := process.Output(ctx, "vgdisplay", "--reportformat=json", name)
+	output, err := process.Output(ctx, []string{"vgdisplay", "--reportformat=json", name})
 	if err != nil {
 		return nil, err
 	}
@@ -89,50 +89,27 @@ type ThinLV struct {
 	Zero      *bool
 }
 
-type Options struct {
-	ThinLV *ThinLV
-}
-
-type Option func(*Options) error
-
-func WithThinLV(tlv *ThinLV) Option {
-	return func(o *Options) error {
-		o.ThinLV = tlv
-		return nil
-	}
-}
-
-func (c *Client) CreateLV(ctx context.Context, name string, opts ...Option) error {
-	options := Options{}
-	for _, opt := range opts {
-		err := opt(&options)
-		if err != nil {
-			return err
-		}
-	}
-
+func (c *Client) CreateLV(ctx context.Context, lv any) error {
 	command := []string{"lvcreate"}
 
-	if options.ThinLV != nil {
-		t := options.ThinLV
-
-		size := t.Size
+	if tlv, ok := lv.(ThinLV); ok {
+		size := tlv.Size
 		if size == "" {
 			size = "100%FREE"
 		}
 
 		var zeroStr string
-		if t.Zero != nil {
-			if *t.Zero {
+		if tlv.Zero != nil {
+			if *tlv.Zero {
 				zeroStr = "y"
 			} else {
 				zeroStr = "n"
 			}
 		}
 
-		command = append(command, "--extents", size, "--thin", t.LV)
-		if t.ChunkSize != "" {
-			command = append(command, "--chunksize", t.ChunkSize)
+		command = append(command, "--extents", size, "--thin", tlv.LV)
+		if tlv.ChunkSize != "" {
+			command = append(command, "--chunksize", tlv.ChunkSize)
 		}
 		if zeroStr != "" {
 			command = append(command, "--zero", zeroStr)
@@ -141,7 +118,7 @@ func (c *Client) CreateLV(ctx context.Context, name string, opts ...Option) erro
 		return fmt.Errorf("unimplemented")
 	}
 
-	_, err := process.Output(ctx, command...)
+	_, err := process.Output(ctx, command)
 	if err != nil {
 		return err
 	}
@@ -153,7 +130,7 @@ type LVInfo struct {
 }
 
 func (c *Client) DisplayLV(ctx context.Context, name string) (*LVInfo, error) {
-	output, err := process.Output(ctx, "lvdisplay", "--reportformat=json", name)
+	output, err := process.Output(ctx, []string{"lvdisplay", "--reportformat=json", name})
 	if err != nil {
 		return nil, err
 	}
@@ -172,7 +149,7 @@ func (c *Client) ExtendLV(ctx context.Context, volume string, size string) error
 		size = "100%FREE"
 	}
 
-	_, err := process.Output(ctx, "lvextend", "--extents", size, volume)
+	_, err := process.Output(ctx, []string{"lvextend", "--extents", size, volume})
 	if err != nil {
 		return err
 	}

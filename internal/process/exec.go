@@ -7,7 +7,7 @@ import (
 	"github.com/benfiola/homelab-helper/internal/logging"
 )
 
-func Output(ctx context.Context, command ...string) (string, error) {
+func Output(ctx context.Context, command []string) (string, error) {
 	logger := logging.FromContext(ctx)
 	logger.Debug("executing command", "command", command)
 
