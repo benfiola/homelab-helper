@@ -105,30 +105,30 @@ func main() {
 					&cli.StringFlag{
 						Name:     "secrets-path",
 						Required: true,
-						Sources:  cli.EnvVars("STORAGE_BUCKET"),
+						Sources:  cli.EnvVars("SECRETS_PATH"),
 					},
 					&cli.StringFlag{
-						Name:     "storage-bucket",
+						Name:     "storage-path",
 						Required: true,
-						Sources:  cli.EnvVars("STORAGE_BUCKET"),
+						Sources:  cli.EnvVars("STORAGE_PATH"),
 					},
 					&cli.StringFlag{
-						Name:     "storage-token",
+						Name:     "storage-credentials-path",
 						Required: true,
-						Sources:  cli.EnvVars("STORAGE_TOKEN"),
+						Sources:  cli.EnvVars("STORAGE_CREDENTIALS_PATH"),
 					},
 				},
 				Action: func(ctx context.Context, c *cli.Command) error {
 					address := c.String("address")
 					secretsPath := c.String("secrets-path")
-					storageBucket := c.String("storage-bucket")
-					storageToken := c.String("storage-token")
+					storagePath := c.String("storage-path")
+					storageCredentialsPath := c.String("storage-credentials-path")
 
 					pusher, err := push.New(&push.Opts{
-						Address:       address,
-						SecretsPath:   secretsPath,
-						StorageBucket: storageBucket,
-						StorageToken:  storageToken,
+						Address:                address,
+						SecretsPath:            secretsPath,
+						StoragePath:            storagePath,
+						StorageCredentialsPath: storageCredentialsPath,
 					})
 					if err != nil {
 						return err
