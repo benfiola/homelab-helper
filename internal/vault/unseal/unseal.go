@@ -9,7 +9,8 @@ import (
 	"time"
 
 	"github.com/benfiola/homelab-helper/internal/logging"
-	vaultclient "github.com/benfiola/homelab-helper/internal/vault/client"
+	"github.com/hashicorp/vault-client-go"
+	"github.com/hashicorp/vault-client-go/schema"
 )
 
 type Opts struct {
@@ -19,15 +20,16 @@ type Opts struct {
 }
 
 type Unsealer struct {
-	Client        *vaultclient.Client
+	Address       string
+	Client        *vault.Client
 	RunForever    bool
 	UnsealKeyPath string
 }
 
 func New(opts *Opts) (*Unsealer, error) {
-	client, err := vaultclient.New(&vaultclient.Opts{
-		Address: opts.Address,
-	})
+	client, err := vault.New(
+		vault.WithAddress(opts.Address),
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -42,6 +44,7 @@ func New(opts *Opts) (*Unsealer, error) {
 	}
 
 	unsealer := Unsealer{
+		Address:       opts.Address,
 		Client:        client,
 		RunForever:    runForever,
 		UnsealKeyPath: opts.UnsealKeyPath,
@@ -73,15 +76,15 @@ func (u *Unsealer) Unseal(ctx context.Context) error {
 		time.Sleep(1 * time.Second)
 	}
 
-	logger.Info("wait for vault connectivity", "address", u.Client.Address)
+	logger.Info("wait for vault connectivity", "address", u.Address)
 	sealed := false
 	for {
-		status, err := u.Client.Status(ctx)
+		response, err := u.Client.System.SealStatus(ctx)
 		if err == nil {
-			sealed = status.Sealed
+			sealed = response.Data.Sealed
 			break
 		}
-		logger.Debug("vault status command failed", "error", err)
+		logger.Debug("vault seal status request failed", "error", err)
 		time.Sleep(1 * time.Second)
 	}
 	if !sealed {
@@ -89,12 +92,12 @@ func (u *Unsealer) Unseal(ctx context.Context) error {
 		return finish()
 	}
 
-	logger.Info("unsealing vault", "address", u.Client.Address)
-	err := u.Client.Unseal(ctx, unsealKey)
+	logger.Info("unsealing vault", "address", u.Address)
+	_, err := u.Client.System.Unseal(ctx, schema.UnsealRequest{Key: unsealKey})
 	if err != nil {
 		return err
 	}
 
-	logger.Info("vault unsealed", "address", u.Client.Address)
+	logger.Info("vault unsealed", "address", u.Address)
 	return finish()
 }

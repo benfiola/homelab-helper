@@ -102,12 +102,33 @@ func main() {
 						Value:   "http://localhost:8200",
 						Sources: cli.EnvVars("ADDRESS"),
 					},
+					&cli.StringFlag{
+						Name:     "secrets-path",
+						Required: true,
+						Sources:  cli.EnvVars("STORAGE_BUCKET"),
+					},
+					&cli.StringFlag{
+						Name:     "storage-bucket",
+						Required: true,
+						Sources:  cli.EnvVars("STORAGE_BUCKET"),
+					},
+					&cli.StringFlag{
+						Name:     "storage-token",
+						Required: true,
+						Sources:  cli.EnvVars("STORAGE_TOKEN"),
+					},
 				},
 				Action: func(ctx context.Context, c *cli.Command) error {
 					address := c.String("address")
+					secretsPath := c.String("secrets-path")
+					storageBucket := c.String("storage-bucket")
+					storageToken := c.String("storage-token")
 
 					pusher, err := push.New(&push.Opts{
-						Address: address,
+						Address:       address,
+						SecretsPath:   secretsPath,
+						StorageBucket: storageBucket,
+						StorageToken:  storageToken,
 					})
 					if err != nil {
 						return err
