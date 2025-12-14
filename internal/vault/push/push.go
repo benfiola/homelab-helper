@@ -6,6 +6,10 @@ import (
 	"fmt"
 	"io"
 	"net/url"
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
 
 	"cloud.google.com/go/storage"
 	"github.com/benfiola/homelab-helper/internal/logging"
@@ -16,20 +20,30 @@ import (
 
 type Opts struct {
 	Address                string
+	Interval               time.Duration
+	RunForever             bool
 	SecretsPath            string
 	StoragePath            string
 	StorageCredentialsPath string
 }
 
 type Pusher struct {
-	Address     string
-	SecretsPath string
-	Storage     *storage.Client
-	StoragePath string
-	Vault       *vault.Client
+	Address      string
+	Interval     time.Duration
+	LastChecksum string
+	RunForever   bool
+	SecretsPath  string
+	Storage      *storage.Client
+	StoragePath  string
+	Vault        *vault.Client
 }
 
 func New(opts *Opts) (*Pusher, error) {
+	interval := opts.Interval
+	if interval == 0 {
+		interval = 10 * time.Minute
+	}
+
 	if opts.SecretsPath == "" {
 		return nil, fmt.Errorf("secrets path unset")
 	}
@@ -56,8 +70,11 @@ func New(opts *Opts) (*Pusher, error) {
 
 	pusher := Pusher{
 		Address:     opts.Address,
+		Interval:    opts.Interval,
+		RunForever:  opts.RunForever,
 		SecretsPath: opts.SecretsPath,
 		Storage:     storageClient,
+		StoragePath: opts.StoragePath,
 		Vault:       vaultClient,
 	}
 	return &pusher, nil
@@ -110,6 +127,33 @@ func (p *Pusher) Push(ctx context.Context) error {
 	err = bucketWriter.Close()
 	if err != nil {
 		return err
+	}
+
+	return nil
+}
+
+func (p *Pusher) Run(ctx context.Context) error {
+	if !p.RunForever {
+		return p.Push(ctx)
+	}
+
+	ticker := time.NewTicker(p.Interval)
+	defer ticker.Stop()
+
+	signalChannel := make(chan os.Signal, 1)
+	signal.Notify(signalChannel, syscall.SIGINT, syscall.SIGTERM)
+
+	running := false
+	for running {
+		select {
+		case <-ticker.C:
+			err := p.Push(ctx)
+			if err != nil {
+				return err
+			}
+		case <-signalChannel:
+			running = false
+		}
 	}
 
 	return nil

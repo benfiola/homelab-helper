@@ -21,18 +21,12 @@ type Opts struct {
 
 type Unsealer struct {
 	Address       string
-	Client        *vault.Client
+	Vault         *vault.Client
 	RunForever    bool
 	UnsealKeyPath string
 }
 
 func New(opts *Opts) (*Unsealer, error) {
-	client, err := vault.New(
-		vault.WithAddress(opts.Address),
-	)
-	if err != nil {
-		return nil, err
-	}
 
 	runForever := true
 	if opts.RunForever != nil {
@@ -43,61 +37,94 @@ func New(opts *Opts) (*Unsealer, error) {
 		return nil, fmt.Errorf("unseal key path unset")
 	}
 
+	vaultClient, err := vault.New(
+		vault.WithAddress(opts.Address),
+	)
+	if err != nil {
+		return nil, err
+	}
+
 	unsealer := Unsealer{
 		Address:       opts.Address,
-		Client:        client,
 		RunForever:    runForever,
 		UnsealKeyPath: opts.UnsealKeyPath,
+		Vault:         vaultClient,
 	}
 	return &unsealer, nil
+}
+
+func (u *Unsealer) WaitForPath(ctx context.Context, path string) {
+	for {
+		_, err := os.Lstat(path)
+		if err != nil {
+			time.Sleep(1 * time.Second)
+			continue
+		}
+		break
+	}
+}
+
+func (u *Unsealer) WaitForVault(ctx context.Context, address string) {
+	logger := logging.FromContext(ctx)
+
+	for {
+		_, err := u.Vault.System.SealStatus(ctx)
+		if err != nil {
+			logger.Debug("vault seal status request failed", "error", err)
+			time.Sleep(1 * time.Second)
+			break
+		}
+		break
+	}
 }
 
 func (u *Unsealer) Unseal(ctx context.Context) error {
 	logger := logging.FromContext(ctx)
 	logger.Info("unsealing vault")
 
-	finish := func() error {
-		if u.RunForever {
-			signalChannel := make(chan os.Signal, 1)
-			signal.Notify(signalChannel, syscall.SIGTERM, syscall.SIGINT)
-			<-signalChannel
-		}
+	logger.Info("waiting for unseal key", "unseal-key-path", u.UnsealKeyPath)
+	u.WaitForPath(ctx, u.UnsealKeyPath)
+
+	logger.Info("waiting for vault", "address", u.Address)
+	u.WaitForVault(ctx, u.Address)
+
+	response, err := u.Vault.System.SealStatus(ctx)
+	if err != nil {
+		return err
+	}
+	if !response.Data.Sealed {
+		logger.Info("vault unsealed")
 		return nil
 	}
 
-	var unsealKey string
-	logger.Info("waiting for unseal key", "unseal-key", u.UnsealKeyPath)
-	for {
-		unsealKeyBytes, err := os.ReadFile(u.UnsealKeyPath)
-		if err == nil {
-			unsealKey = string(unsealKeyBytes)
-			break
-		}
-		time.Sleep(1 * time.Second)
+	logger.Info("reading unseal key", "unseal-key-path", u.UnsealKeyPath)
+	unsealKeyBytes, err := os.ReadFile(u.UnsealKeyPath)
+	if err != nil {
+		return err
 	}
-
-	logger.Info("wait for vault connectivity", "address", u.Address)
-	sealed := false
-	for {
-		response, err := u.Client.System.SealStatus(ctx)
-		if err == nil {
-			sealed = response.Data.Sealed
-			break
-		}
-		logger.Debug("vault seal status request failed", "error", err)
-		time.Sleep(1 * time.Second)
-	}
-	if !sealed {
-		logger.Info("vault is already unsealed")
-		return finish()
-	}
+	unsealKey := string(unsealKeyBytes)
 
 	logger.Info("unsealing vault", "address", u.Address)
-	_, err := u.Client.System.Unseal(ctx, schema.UnsealRequest{Key: unsealKey})
+	_, err = u.Vault.System.Unseal(ctx, schema.UnsealRequest{Key: unsealKey})
 	if err != nil {
 		return err
 	}
 
 	logger.Info("vault unsealed", "address", u.Address)
-	return finish()
+	return nil
+}
+
+func (u *Unsealer) Run(ctx context.Context) error {
+	err := u.Unseal(ctx)
+	if err != nil {
+		return err
+	}
+
+	if u.RunForever {
+		signalChannel := make(chan os.Signal, 1)
+		signal.Notify(signalChannel, syscall.SIGTERM, syscall.SIGINT)
+		<-signalChannel
+	}
+
+	return nil
 }

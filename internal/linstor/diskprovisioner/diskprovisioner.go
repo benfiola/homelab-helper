@@ -61,19 +61,27 @@ func New(opts *Opts) (*DiskProvisioner, error) {
 	return &provisioner, nil
 }
 
+func (p *DiskProvisioner) ResolvePartitionLabel(ctx context.Context, label string) (string, error) {
+	symlink := fmt.Sprintf("/dev/disk/by-partlabel/%s", p.PartitionLabel)
+	relPath, err := os.Readlink(symlink)
+	if err != nil {
+		return "", err
+	}
+	absPath := filepath.Join(filepath.Dir(symlink), relPath)
+	if absPath == symlink {
+		return "", fmt.Errorf("could not resolve device symlink '%s", symlink)
+	}
+	return absPath, nil
+}
+
 func (p *DiskProvisioner) Provision(ctx context.Context) error {
 	logger := logging.FromContext(ctx)
 	logger.Info("provisioning disks")
 
 	logger.Info("resolving symlink", "partition-label", p.PartitionLabel)
-	symlink := fmt.Sprintf("/dev/disk/by-partlabel/%s", p.PartitionLabel)
-	pv, err := os.Readlink(symlink)
+	pv, err := p.ResolvePartitionLabel(ctx, p.PartitionLabel)
 	if err != nil {
 		return err
-	}
-	pv = filepath.Join(filepath.Dir(symlink), pv)
-	if pv == symlink {
-		return fmt.Errorf("could not resolve device symlink '%s", symlink)
 	}
 
 	_, err = p.Client.DisplayPV(ctx, pv)
@@ -116,6 +124,15 @@ func (p *DiskProvisioner) Provision(ctx context.Context) error {
 
 	logger.Info("extending logical volume", "logical-volume", lv)
 	p.Client.ExtendLV(ctx, lv, "")
+
+	return nil
+}
+
+func (p *DiskProvisioner) Run(ctx context.Context) error {
+	err := p.Provision(ctx)
+	if err != nil {
+		return err
+	}
 
 	if p.RunForever {
 		signalChannel := make(chan os.Signal, 1)

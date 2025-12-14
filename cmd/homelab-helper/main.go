@@ -64,7 +64,7 @@ func main() {
 						return err
 					}
 
-					return provisioner.Provision(ctx)
+					return provisioner.Run(ctx)
 				},
 			},
 			{
@@ -91,7 +91,7 @@ func main() {
 					if err != nil {
 						return err
 					}
-					return unsealer.Unseal(ctx)
+					return unsealer.Run(ctx)
 				},
 			},
 			{
@@ -134,7 +134,7 @@ func main() {
 						return err
 					}
 
-					return pusher.Push(ctx)
+					return pusher.Run(ctx)
 				},
 			},
 		},
