@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"fmt"
-	"log/slog"
 	"os"
 
 	"github.com/benfiola/homelab-helper/internal/info"
@@ -15,8 +14,6 @@ import (
 	"github.com/urfave/cli/v3"
 )
 
-var logger = slog.New(slog.DiscardHandler)
-
 func main() {
 	cli.VersionPrinter = func(cmd *cli.Command) {
 		fmt.Fprint(cmd.Root().Writer, cmd.Root().Version)
@@ -26,8 +23,7 @@ func main() {
 		Before: func(ctx context.Context, c *cli.Command) (context.Context, error) {
 			format := c.String("log-format")
 			level := c.String("log-level")
-			var err error
-			logger, err = logging.New(&logging.Opts{Format: format, Level: level})
+			logger, err := logging.New(&logging.Opts{Format: format, Level: level})
 			if err != nil {
 				return ctx, err
 			}
@@ -188,7 +184,7 @@ func main() {
 	err := command.Run(context.Background(), os.Args)
 	code := 0
 	if err != nil {
-		logger.Error("command failed", "error", err)
+		fmt.Printf("command failed, error: %v", err)
 		code = 1
 	}
 	os.Exit(code)
