@@ -29,10 +29,15 @@ func (c *Client) CreatePV(ctx context.Context, device string) error {
 }
 
 type PVInfo struct {
+	Report []struct {
+		PV []struct {
+			PVName string `json:"pv_name"`
+		} `json:"pv"`
+	} `json:"report"`
 }
 
-func (c *Client) DisplayPV(ctx context.Context, device string) (*PVInfo, error) {
-	output, err := process.Output(ctx, []string{"pvdisplay", "--reportformat=json", device})
+func (c *Client) ShowPV(ctx context.Context) (*PVInfo, error) {
+	output, err := process.Output(ctx, []string{"pvs", "--reportformat=json"})
 	if err != nil {
 		return nil, err
 	}
@@ -65,21 +70,26 @@ func (c *Client) CreateVG(ctx context.Context, name string, device string) error
 }
 
 type VGInfo struct {
+	Report []struct {
+		VG []struct {
+			VGName string `json:"vg_name"`
+		} `json:"vg"`
+	} `json:"report"`
 }
 
-func (c *Client) DisplayVG(ctx context.Context, name string) (*VGInfo, error) {
-	output, err := process.Output(ctx, []string{"vgdisplay", "--reportformat=json", name})
+func (c *Client) ShowVG(ctx context.Context) (*VGInfo, error) {
+	output, err := process.Output(ctx, []string{"vgs", "--reportformat=json"})
 	if err != nil {
 		return nil, err
 	}
 
-	vginfo := VGInfo{}
-	err = json.Unmarshal([]byte(output), &vginfo)
+	vgInfo := VGInfo{}
+	err = json.Unmarshal([]byte(output), &vgInfo)
 	if err != nil {
 		return nil, err
 	}
 
-	return &vginfo, nil
+	return &vgInfo, nil
 }
 
 type ThinLV struct {
@@ -127,21 +137,26 @@ func (c *Client) CreateLV(ctx context.Context, lv any) error {
 }
 
 type LVInfo struct {
+	Report []struct {
+		LV []struct {
+			LVName string `json:"lv_name"`
+		} `json:"lv"`
+	} `json:"report"`
 }
 
-func (c *Client) DisplayLV(ctx context.Context, name string) (*LVInfo, error) {
-	output, err := process.Output(ctx, []string{"lvdisplay", "--reportformat=json", name})
+func (c *Client) ShowLV(ctx context.Context) (*LVInfo, error) {
+	output, err := process.Output(ctx, []string{"lvs", "--reportformat=json"})
 	if err != nil {
 		return nil, err
 	}
 
-	lvinfo := LVInfo{}
-	err = json.Unmarshal([]byte(output), &lvinfo)
+	lvInfo := LVInfo{}
+	err = json.Unmarshal([]byte(output), &lvInfo)
 	if err != nil {
 		return nil, err
 	}
 
-	return &lvinfo, nil
+	return &lvInfo, nil
 }
 
 func (c *Client) ExtendLV(ctx context.Context, volume string, size string) error {

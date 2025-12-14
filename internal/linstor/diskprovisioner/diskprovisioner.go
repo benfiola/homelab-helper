@@ -74,6 +74,63 @@ func (p *DiskProvisioner) ResolvePartitionLabel(ctx context.Context, label strin
 	return absPath, nil
 }
 
+func (p *DiskProvisioner) ExistsPV(ctx context.Context, pv string) (bool, error) {
+	data, err := p.Client.ShowPV(ctx)
+	if err != nil {
+		return false, err
+	}
+
+	found := false
+	for _, item := range data.Report {
+		for _, currPv := range item.PV {
+			if currPv.PVName == pv {
+				found = true
+				break
+			}
+		}
+	}
+
+	return found, nil
+}
+
+func (p *DiskProvisioner) ExistsVG(ctx context.Context, vg string) (bool, error) {
+	data, err := p.Client.ShowVG(ctx)
+	if err != nil {
+		return false, err
+	}
+
+	found := false
+	for _, item := range data.Report {
+		for _, currVg := range item.VG {
+			if currVg.VGName == vg {
+				found = true
+				break
+			}
+		}
+	}
+
+	return found, nil
+}
+
+func (p *DiskProvisioner) ExistsLV(ctx context.Context, lv string) (bool, error) {
+	data, err := p.Client.ShowLV(ctx)
+	if err != nil {
+		return false, err
+	}
+
+	found := false
+	for _, item := range data.Report {
+		for _, currLv := range item.LV {
+			if currLv.LVName == lv {
+				found = true
+				break
+			}
+		}
+	}
+
+	return found, nil
+}
+
 func (p *DiskProvisioner) Provision(ctx context.Context) error {
 	logger := logging.FromContext(ctx)
 	logger.Info("provisioning disks")
@@ -84,8 +141,12 @@ func (p *DiskProvisioner) Provision(ctx context.Context) error {
 		return err
 	}
 
-	_, err = p.Client.DisplayPV(ctx, pv)
+	existsPV, err := p.ExistsPV(ctx, pv)
 	if err != nil {
+		return err
+	}
+
+	if !existsPV {
 		logger.Info("creating physical volume", "physical-volume", pv)
 		err = p.Client.CreatePV(ctx, pv)
 		if err != nil {
@@ -99,8 +160,12 @@ func (p *DiskProvisioner) Provision(ctx context.Context) error {
 		return err
 	}
 
-	_, err = p.Client.DisplayVG(ctx, p.VolumeGroup)
+	existsVG, err := p.ExistsVG(ctx, p.VolumeGroup)
 	if err != nil {
+		return err
+	}
+
+	if !existsVG {
 		logger.Info("creating volume group", "physical-volume", pv, "volume-group", p.VolumeGroup)
 		err = p.Client.CreateVG(ctx, p.VolumeGroup, pv)
 		if err != nil {
@@ -108,9 +173,13 @@ func (p *DiskProvisioner) Provision(ctx context.Context) error {
 		}
 	}
 
-	lv := fmt.Sprintf("%s/%s", p.VolumeGroup, p.Pool)
-	_, err = p.Client.DisplayLV(ctx, lv)
+	existsLV, err := p.ExistsLV(ctx, p.Pool)
 	if err != nil {
+		return err
+	}
+
+	lv := fmt.Sprintf("%s/%s", p.VolumeGroup, p.Pool)
+	if !existsLV {
 		logger.Info("creating logical volume", "logical-volume", lv)
 		err = p.Client.CreateLV(ctx, lvm2.ThinLV{
 			ChunkSize: "512K",
