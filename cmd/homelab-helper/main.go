@@ -121,18 +121,24 @@ func main() {
 						Required: true,
 						Sources:  cli.EnvVars("STORAGE_CREDENTIALS_PATH"),
 					},
+					&cli.StringFlag{
+						Name:    "token",
+						Sources: cli.EnvVars("TOKEN"),
+					},
 				},
 				Action: func(ctx context.Context, c *cli.Command) error {
 					address := c.String("address")
 					secretsPath := c.String("secrets-path")
 					storagePath := c.String("storage-path")
 					storageCredentialsPath := c.String("storage-credentials-path")
+					token := c.String("token")
 
 					pusher, err := push.New(&push.Opts{
 						Address:                address,
 						SecretsPath:            secretsPath,
 						StoragePath:            storagePath,
 						StorageCredentialsPath: storageCredentialsPath,
+						Token:                  token,
 					})
 					if err != nil {
 						return err

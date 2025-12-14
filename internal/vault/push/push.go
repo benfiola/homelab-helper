@@ -17,6 +17,7 @@ import (
 	"github.com/benfiola/homelab-helper/internal/logging"
 	"github.com/goccy/go-yaml"
 	"github.com/hashicorp/vault-client-go"
+	"github.com/hashicorp/vault-client-go/schema"
 	"google.golang.org/api/option"
 )
 
@@ -27,6 +28,7 @@ type Opts struct {
 	SecretsPath            string
 	StoragePath            string
 	StorageCredentialsPath string
+	Token                  string
 }
 
 type Pusher struct {
@@ -37,6 +39,7 @@ type Pusher struct {
 	SecretsPath  string
 	Storage      *storage.Client
 	StoragePath  string
+	Token        string
 	Vault        *vault.Client
 }
 
@@ -74,6 +77,7 @@ func New(opts *Opts) (*Pusher, error) {
 		SecretsPath: opts.SecretsPath,
 		Storage:     storageClient,
 		StoragePath: opts.StoragePath,
+		Token:       opts.Token,
 		Vault:       vaultClient,
 	}
 	return &pusher, nil
@@ -92,7 +96,7 @@ func ParseStoragePath(storagePath string) (string, string, error) {
 }
 
 func (p *Pusher) ExportSecrets(ctx context.Context, secretsPath string) (map[string]any, error) {
-	response, err := p.Vault.Secrets.KvV2List(ctx, secretsPath)
+	response, err := p.Vault.Secrets.KvV2List(ctx, "", vault.WithMountPath(secretsPath))
 	if err != nil {
 		return nil, err
 	}
@@ -100,8 +104,7 @@ func (p *Pusher) ExportSecrets(ctx context.Context, secretsPath string) (map[str
 
 	data := map[string]any{}
 	for _, app := range apps {
-		path := fmt.Sprintf("%s/%s", secretsPath, app)
-		response, err := p.Vault.Secrets.KvV2Read(ctx, path)
+		response, err := p.Vault.Secrets.KvV2Read(ctx, app, vault.WithMountPath(secretsPath))
 		if err != nil {
 			return nil, err
 		}
@@ -145,9 +148,44 @@ func (p *Pusher) Upload(ctx context.Context, storagePath string, data map[string
 	return nil
 }
 
+func (p *Pusher) AuthVault(ctx context.Context, addresss string) error {
+	token := p.Token
+	if token == "" {
+		jwtBytes, err := os.ReadFile("/var/run/secrets/kubernetes.io/serviceaccount/token")
+		if err != nil {
+			return err
+		}
+		jwt := string(jwtBytes)
+
+		response, err := p.Vault.Auth.KubernetesLogin(ctx, schema.KubernetesLoginRequest{
+			Jwt:  jwt,
+			Role: "vault-push-secrets",
+		})
+		if err != nil {
+			return err
+		}
+
+		token = response.Auth.ClientToken
+	}
+
+	err := p.Vault.SetToken(token)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
 func (p *Pusher) Push(ctx context.Context) error {
 	logger := logging.FromContext(ctx)
 	logger.Info("pushing vault secrets to cloud storage")
+
+	logger.Info("logging into vault", "address", p.Address)
+	err := p.AuthVault(ctx, p.Address)
+	if err != nil {
+		return err
+	}
+	defer p.Vault.ClearToken()
 
 	logger.Info("exporting secrets", "address", p.Address)
 	secrets, err := p.ExportSecrets(ctx, p.SecretsPath)
