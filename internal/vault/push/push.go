@@ -3,11 +3,13 @@ package push
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/json"
 	"fmt"
 	"io"
-	"net/url"
 	"os"
 	"os/signal"
+	"regexp"
 	"syscall"
 	"time"
 
@@ -53,12 +55,9 @@ func New(opts *Opts) (*Pusher, error) {
 		return nil, err
 	}
 
-	parsed, err := url.Parse(opts.StoragePath)
+	_, _, err = ParseStoragePath(opts.StoragePath)
 	if err != nil {
-		return nil, fmt.Errorf("invalid storage path %s", opts.StoragePath)
-	}
-	if parsed.Scheme != "gs" && parsed.Path == "" || parsed.Path == "/" {
-		return nil, fmt.Errorf("invalid storage path %s", opts.StoragePath)
+		return nil, err
 	}
 
 	vaultClient, err := vault.New(
@@ -80,51 +79,95 @@ func New(opts *Opts) (*Pusher, error) {
 	return &pusher, nil
 }
 
+var storagePathRegex = regexp.MustCompile("^gs://([^/]+)/(.*[^/])$")
+
+func ParseStoragePath(storagePath string) (string, string, error) {
+	matches := storagePathRegex.FindStringSubmatch(storagePath)
+	if matches == nil {
+		return "", "", fmt.Errorf("invalid storage path %s", storagePath)
+	}
+	bucket := matches[1]
+	path := matches[2]
+	return bucket, path, nil
+}
+
+func (p *Pusher) ExportSecrets(ctx context.Context, secretsPath string) (map[string]any, error) {
+	response, err := p.Vault.Secrets.KvV2List(ctx, secretsPath)
+	if err != nil {
+		return nil, err
+	}
+	apps := response.Data.Keys
+
+	data := map[string]any{}
+	for _, app := range apps {
+		path := fmt.Sprintf("%s/%s", secretsPath, app)
+		response, err := p.Vault.Secrets.KvV2Read(ctx, path)
+		if err != nil {
+			return nil, err
+		}
+		data[app] = response.Data.Data
+	}
+
+	return data, nil
+}
+
+func (p *Pusher) Checksum(ctx context.Context, data map[string]any) (string, error) {
+	dataBytes, err := json.Marshal(data)
+	if err != nil {
+		return "", err
+	}
+
+	hash := sha256.Sum256(dataBytes)
+
+	return fmt.Sprintf("%x", hash), nil
+}
+
+func (p *Pusher) Upload(ctx context.Context, storagePath string, data map[string]any) error {
+	bucket, path, err := ParseStoragePath(storagePath)
+	if err != nil {
+		return err
+	}
+
+	dataBytes, err := yaml.Marshal(data)
+	if err != nil {
+		return err
+	}
+
+	reader := bytes.NewReader(dataBytes)
+	writer := p.Storage.Bucket(bucket).Object(path).NewWriter(ctx)
+	defer writer.Close()
+
+	_, err = io.Copy(writer, reader)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
 func (p *Pusher) Push(ctx context.Context) error {
 	logger := logging.FromContext(ctx)
 	logger.Info("pushing vault secrets to cloud storage")
 
-	logger.Info("listing kv paths", "address", p.Address)
-	response, err := p.Vault.Secrets.KvV2List(ctx, p.SecretsPath)
-	if err != nil {
-		return err
-	}
-	apps := response.Data.Keys
-
-	secrets := map[string]map[string]any{}
-	for _, path := range apps {
-		logger.Info("get kv path", "address", p.Address, "path", path)
-		fullPath := fmt.Sprintf("%s/%s", p.SecretsPath, path)
-		response, err := p.Vault.Secrets.KvV2Read(ctx, fullPath)
-		if err != nil {
-			return err
-		}
-		secret := response.Data.Data
-		secrets[path] = secret
-	}
-
-	parsed, err := url.Parse(p.StoragePath)
-	if err != nil {
-		return err
-	}
-	storageBucket := parsed.Hostname()
-	storagePath := parsed.Path
-
-	logger.Info("uploading to cloud storage", "bucket", storageBucket, "file", storagePath)
-
-	secretsBytes, err := yaml.Marshal(secrets)
+	logger.Info("exporting secrets", "address", p.Address)
+	secrets, err := p.ExportSecrets(ctx, p.SecretsPath)
 	if err != nil {
 		return err
 	}
 
-	secretsReader := bytes.NewReader(secretsBytes)
-	bucketWriter := p.Storage.Bucket(storageBucket).Object(storagePath).NewWriter(ctx)
-	_, err = io.Copy(bucketWriter, secretsReader)
+	logger.Info("calculating checksum")
+	checksum, err := p.Checksum(ctx, secrets)
 	if err != nil {
 		return err
 	}
+	if checksum == p.LastChecksum {
+		logger.Info("secrets are unchanged")
+		return nil
+	}
+	p.LastChecksum = checksum
 
-	err = bucketWriter.Close()
+	logger.Info("uploading secrets", "storage-path", p.StoragePath)
+	err = p.Upload(ctx, p.StoragePath, secrets)
 	if err != nil {
 		return err
 	}
@@ -136,6 +179,9 @@ func (p *Pusher) Run(ctx context.Context) error {
 	if !p.RunForever {
 		return p.Push(ctx)
 	}
+
+	logger := logging.FromContext(ctx)
+	logger.Info("starting loop", "interval", p.Interval)
 
 	ticker := time.NewTicker(p.Interval)
 	defer ticker.Stop()

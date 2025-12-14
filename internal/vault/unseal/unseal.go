@@ -54,12 +54,15 @@ func New(opts *Opts) (*Unsealer, error) {
 }
 
 func (u *Unsealer) WaitForPath(ctx context.Context, path string) {
+	logger := logging.FromContext(ctx)
+
 	for {
 		_, err := os.Lstat(path)
 		if err != nil {
 			time.Sleep(1 * time.Second)
 			continue
 		}
+		logger.Debug("path lstat failed", "error", err, "path", path)
 		break
 	}
 }
@@ -69,12 +72,11 @@ func (u *Unsealer) WaitForVault(ctx context.Context, address string) {
 
 	for {
 		_, err := u.Vault.System.SealStatus(ctx)
-		if err != nil {
-			logger.Debug("vault seal status request failed", "error", err)
-			time.Sleep(1 * time.Second)
+		if err == nil {
 			break
 		}
-		break
+		logger.Debug("vault seal status request failed", "error", err)
+		time.Sleep(1 * time.Second)
 	}
 }
 
