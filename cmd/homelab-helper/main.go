@@ -9,6 +9,7 @@ import (
 	"github.com/benfiola/homelab-helper/internal/info"
 	"github.com/benfiola/homelab-helper/internal/linstor/diskprovisioner"
 	"github.com/benfiola/homelab-helper/internal/logging"
+	"github.com/benfiola/homelab-helper/internal/ptr"
 	"github.com/benfiola/homelab-helper/internal/vault/push"
 	"github.com/benfiola/homelab-helper/internal/vault/unseal"
 	"github.com/urfave/cli/v3"
@@ -48,6 +49,11 @@ func main() {
 						Required: true,
 						Sources:  cli.EnvVars("POOL"),
 					},
+					&cli.BoolFlag{
+						Name:    "run-forever",
+						Value:   true,
+						Sources: cli.EnvVars("RUN_FOREVER"),
+					},
 					&cli.StringFlag{
 						Name:     "volume-group",
 						Required: true,
@@ -56,12 +62,14 @@ func main() {
 				},
 				Action: func(ctx context.Context, c *cli.Command) error {
 					partitionLabel := c.String("partition-label")
-					volumeGroup := c.String("volume-group")
 					pool := c.String("pool")
+					runForever := c.Bool("run-forever")
+					volumeGroup := c.String("volume-group")
 
 					provisioner, err := diskprovisioner.New(&diskprovisioner.Opts{
 						PartitionLabel: partitionLabel,
 						Pool:           pool,
+						RunForever:     ptr.Get(runForever),
 						VolumeGroup:    volumeGroup,
 					})
 					if err != nil {
@@ -78,6 +86,11 @@ func main() {
 						Name:    "address",
 						Sources: cli.EnvVars("ADDRESS"),
 					},
+					&cli.BoolFlag{
+						Name:    "run-forever",
+						Value:   true,
+						Sources: cli.EnvVars("RUN_FOREVER"),
+					},
 					&cli.StringFlag{
 						Name:     "unseal-key-path",
 						Required: true,
@@ -86,10 +99,12 @@ func main() {
 				},
 				Action: func(ctx context.Context, c *cli.Command) error {
 					address := c.String("address")
+					runForever := c.Bool("run-forever")
 					unsealKeyPath := c.String("unseal-key-path")
 
 					unsealer, err := unseal.New(&unseal.Opts{
 						Address:       address,
+						RunForever:    ptr.Get(runForever),
 						UnsealKeyPath: unsealKeyPath,
 					})
 					if err != nil {
@@ -105,6 +120,11 @@ func main() {
 						Name:    "address",
 						Value:   "http://localhost:8200",
 						Sources: cli.EnvVars("ADDRESS"),
+					},
+					&cli.BoolFlag{
+						Name:    "run-forever",
+						Value:   true,
+						Sources: cli.EnvVars("RUN_FOREVER"),
 					},
 					&cli.StringFlag{
 						Name:     "secrets-path",
@@ -128,6 +148,7 @@ func main() {
 				},
 				Action: func(ctx context.Context, c *cli.Command) error {
 					address := c.String("address")
+					runForever := c.Bool("run-forever")
 					secretsPath := c.String("secrets-path")
 					storagePath := c.String("storage-path")
 					storageCredentialsPath := c.String("storage-credentials-path")
@@ -135,6 +156,7 @@ func main() {
 
 					pusher, err := push.New(&push.Opts{
 						Address:                address,
+						RunForever:             ptr.Get(runForever),
 						SecretsPath:            secretsPath,
 						StoragePath:            storagePath,
 						StorageCredentialsPath: storageCredentialsPath,
