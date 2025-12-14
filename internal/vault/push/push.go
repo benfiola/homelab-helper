@@ -24,7 +24,7 @@ import (
 type Opts struct {
 	Address                string
 	Interval               time.Duration
-	RunForever             bool
+	RunForever             *bool
 	SecretsPath            string
 	StoragePath            string
 	StorageCredentialsPath string
@@ -47,6 +47,11 @@ func New(opts *Opts) (*Pusher, error) {
 	interval := opts.Interval
 	if interval == 0 {
 		interval = 10 * time.Minute
+	}
+
+	runForever := true
+	if opts.RunForever != nil {
+		runForever = *opts.RunForever
 	}
 
 	if opts.SecretsPath == "" {
@@ -72,8 +77,8 @@ func New(opts *Opts) (*Pusher, error) {
 
 	pusher := Pusher{
 		Address:     opts.Address,
-		Interval:    opts.Interval,
-		RunForever:  opts.RunForever,
+		Interval:    interval,
+		RunForever:  runForever,
 		SecretsPath: opts.SecretsPath,
 		Storage:     storageClient,
 		StoragePath: opts.StoragePath,
@@ -214,12 +219,17 @@ func (p *Pusher) Push(ctx context.Context) error {
 }
 
 func (p *Pusher) Run(ctx context.Context) error {
+	err := p.Push(ctx)
+	if err != nil {
+		return err
+	}
+
 	if !p.RunForever {
-		return p.Push(ctx)
+		return nil
 	}
 
 	logger := logging.FromContext(ctx)
-	logger.Info("starting loop", "interval", p.Interval)
+	logger.Info("running forever", "interval", p.Interval)
 
 	ticker := time.NewTicker(p.Interval)
 	defer ticker.Stop()
@@ -227,7 +237,7 @@ func (p *Pusher) Run(ctx context.Context) error {
 	signalChannel := make(chan os.Signal, 1)
 	signal.Notify(signalChannel, syscall.SIGINT, syscall.SIGTERM)
 
-	running := false
+	running := true
 	for running {
 		select {
 		case <-ticker.C:
