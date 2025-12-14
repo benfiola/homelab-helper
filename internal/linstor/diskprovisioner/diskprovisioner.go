@@ -198,12 +198,15 @@ func (p *DiskProvisioner) Provision(ctx context.Context) error {
 }
 
 func (p *DiskProvisioner) Run(ctx context.Context) error {
+
 	err := p.Provision(ctx)
 	if err != nil {
 		return err
 	}
 
 	if p.RunForever {
+		logger := logging.FromContext(ctx)
+		logger.Info("sleeping until signal")
 		signalChannel := make(chan os.Signal, 1)
 		signal.Notify(signalChannel, syscall.SIGTERM, syscall.SIGINT)
 		<-signalChannel

@@ -123,6 +123,8 @@ func (u *Unsealer) Run(ctx context.Context) error {
 	}
 
 	if u.RunForever {
+		logger := logging.FromContext(ctx)
+		logger.Info("sleeping until signal")
 		signalChannel := make(chan os.Signal, 1)
 		signal.Notify(signalChannel, syscall.SIGTERM, syscall.SIGINT)
 		<-signalChannel
