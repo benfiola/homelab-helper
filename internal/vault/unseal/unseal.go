@@ -27,6 +27,9 @@ type Unsealer struct {
 }
 
 func New(opts *Opts) (*Unsealer, error) {
+	if opts.Address == "" {
+		return nil, fmt.Errorf("address unset")
+	}
 
 	runForever := true
 	if opts.RunForever != nil {

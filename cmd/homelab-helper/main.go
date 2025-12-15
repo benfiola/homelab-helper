@@ -117,6 +117,10 @@ func main() {
 						Value:   "http://localhost:8200",
 						Sources: cli.EnvVars("ADDRESS"),
 					},
+					&cli.StringFlag{
+						Name:    "role",
+						Sources: cli.EnvVars("ROLE"),
+					},
 					&cli.BoolFlag{
 						Name:    "run-forever",
 						Value:   true,
@@ -144,6 +148,7 @@ func main() {
 				},
 				Action: func(ctx context.Context, c *cli.Command) error {
 					address := c.String("address")
+					role := c.String("role")
 					runForever := c.Bool("run-forever")
 					secretsPath := c.String("secrets-path")
 					storagePath := c.String("storage-path")
@@ -152,6 +157,7 @@ func main() {
 
 					pusher, err := push.New(&push.Opts{
 						Address:                address,
+						Role:                   role,
 						RunForever:             ptr.Get(runForever),
 						SecretsPath:            secretsPath,
 						StoragePath:            storagePath,

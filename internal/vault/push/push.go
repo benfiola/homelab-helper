@@ -24,6 +24,7 @@ import (
 type Opts struct {
 	Address                string
 	Interval               time.Duration
+	Role                   string
 	RunForever             *bool
 	SecretsPath            string
 	StoragePath            string
@@ -35,6 +36,7 @@ type Pusher struct {
 	Address      string
 	Interval     time.Duration
 	LastChecksum string
+	Role         string
 	RunForever   bool
 	SecretsPath  string
 	Storage      *storage.Client
@@ -44,9 +46,17 @@ type Pusher struct {
 }
 
 func New(opts *Opts) (*Pusher, error) {
+	if opts.Address == "" {
+		return nil, fmt.Errorf("address unset")
+	}
+
 	interval := opts.Interval
 	if interval == 0 {
 		interval = 10 * time.Minute
+	}
+
+	if opts.Role == "" {
+		return nil, fmt.Errorf("role unset")
 	}
 
 	runForever := true
@@ -56,6 +66,10 @@ func New(opts *Opts) (*Pusher, error) {
 
 	if opts.SecretsPath == "" {
 		return nil, fmt.Errorf("secrets path unset")
+	}
+
+	if opts.StorageCredentialsPath == "" {
+		return nil, fmt.Errorf("storage credentials path unset")
 	}
 
 	storageClient, err := storage.NewClient(context.Background(), option.WithCredentialsFile(opts.StorageCredentialsPath))
@@ -68,6 +82,10 @@ func New(opts *Opts) (*Pusher, error) {
 		return nil, err
 	}
 
+	if opts.Token == "" {
+		return nil, fmt.Errorf("token unset")
+	}
+
 	vaultClient, err := vault.New(
 		vault.WithAddress(opts.Address),
 	)
@@ -78,6 +96,7 @@ func New(opts *Opts) (*Pusher, error) {
 	pusher := Pusher{
 		Address:     opts.Address,
 		Interval:    interval,
+		Role:        opts.Role,
 		RunForever:  runForever,
 		SecretsPath: opts.SecretsPath,
 		Storage:     storageClient,
@@ -164,7 +183,7 @@ func (p *Pusher) AuthVault(ctx context.Context, addresss string) error {
 
 		response, err := p.Vault.Auth.KubernetesLogin(ctx, schema.KubernetesLoginRequest{
 			Jwt:  jwt,
-			Role: "vault-push-secrets",
+			Role: p.Role,
 		})
 		if err != nil {
 			return err
