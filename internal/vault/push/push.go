@@ -82,10 +82,6 @@ func New(opts *Opts) (*Pusher, error) {
 		return nil, err
 	}
 
-	if opts.Token == "" {
-		return nil, fmt.Errorf("token unset")
-	}
-
 	vaultClient, err := vault.New(
 		vault.WithAddress(opts.Address),
 	)
