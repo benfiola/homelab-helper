@@ -4,9 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"os/signal"
 	"path/filepath"
-	"syscall"
 
 	"github.com/benfiola/homelab-helper/internal/logging"
 	"github.com/benfiola/homelab-helper/internal/lvm2"
@@ -16,7 +14,6 @@ import (
 type Opts struct {
 	PartitionLabel string
 	Pool           string
-	RunForever     *bool
 	VolumeGroup    string
 }
 
@@ -24,7 +21,6 @@ type DiskProvisioner struct {
 	Client         *lvm2.Client
 	PartitionLabel string
 	Pool           string
-	RunForever     bool
 	VolumeGroup    string
 }
 
@@ -42,11 +38,6 @@ func New(opts *Opts) (*DiskProvisioner, error) {
 		return nil, fmt.Errorf("pool unset")
 	}
 
-	runForever := true
-	if opts.RunForever != nil {
-		runForever = *opts.RunForever
-	}
-
 	if opts.VolumeGroup == "" {
 		return nil, fmt.Errorf("volume group unset")
 	}
@@ -55,7 +46,6 @@ func New(opts *Opts) (*DiskProvisioner, error) {
 		Client:         client,
 		PartitionLabel: opts.PartitionLabel,
 		Pool:           opts.Pool,
-		RunForever:     runForever,
 		VolumeGroup:    opts.VolumeGroup,
 	}
 	return &provisioner, nil
@@ -198,18 +188,9 @@ func (p *DiskProvisioner) Provision(ctx context.Context) error {
 }
 
 func (p *DiskProvisioner) Run(ctx context.Context) error {
-
 	err := p.Provision(ctx)
 	if err != nil {
 		return err
-	}
-
-	if p.RunForever {
-		logger := logging.FromContext(ctx)
-		logger.Info("sleeping until signal")
-		signalChannel := make(chan os.Signal, 1)
-		signal.Notify(signalChannel, syscall.SIGTERM, syscall.SIGINT)
-		<-signalChannel
 	}
 
 	return nil

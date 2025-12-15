@@ -45,11 +45,6 @@ func main() {
 						Required: true,
 						Sources:  cli.EnvVars("POOL"),
 					},
-					&cli.BoolFlag{
-						Name:    "run-forever",
-						Value:   true,
-						Sources: cli.EnvVars("RUN_FOREVER"),
-					},
 					&cli.StringFlag{
 						Name:     "volume-group",
 						Required: true,
@@ -59,13 +54,11 @@ func main() {
 				Action: func(ctx context.Context, c *cli.Command) error {
 					partitionLabel := c.String("partition-label")
 					pool := c.String("pool")
-					runForever := c.Bool("run-forever")
 					volumeGroup := c.String("volume-group")
 
 					provisioner, err := diskprovisioner.New(&diskprovisioner.Opts{
 						PartitionLabel: partitionLabel,
 						Pool:           pool,
-						RunForever:     ptr.Get(runForever),
 						VolumeGroup:    volumeGroup,
 					})
 					if err != nil {
