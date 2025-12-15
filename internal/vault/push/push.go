@@ -168,7 +168,7 @@ func (p *Pusher) Upload(ctx context.Context, storagePath string, data map[string
 	return nil
 }
 
-func (p *Pusher) AuthVault(ctx context.Context, addresss string, role string) error {
+func (p *Pusher) AuthVault(ctx context.Context, address string, role string) error {
 	token := p.Token
 	if token == "" {
 		jwtBytes, err := os.ReadFile("/var/run/secrets/kubernetes.io/serviceaccount/token")

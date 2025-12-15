@@ -8,7 +8,7 @@ FROM debian:bookworm-slim
 
 RUN <<EOF
 apt -y update
-apt -y install lvm2 parted
+apt -y install curl jq kubectl lvm2 parted vim
 EOF
 
 COPY --from=homelab_helper_builder /usr/bin/homelab-helper /usr/bin/homelab-helper
