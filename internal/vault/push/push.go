@@ -169,14 +169,20 @@ func (p *Pusher) Upload(ctx context.Context, storagePath string, data map[string
 }
 
 func (p *Pusher) AuthVault(ctx context.Context, address string, role string) error {
+	logger := logging.FromContext(ctx)
+
 	token := p.Token
 	if token == "" {
-		jwtBytes, err := os.ReadFile("/var/run/secrets/kubernetes.io/serviceaccount/token")
+
+		tokenPath := "/var/run/secrets/kubernetes.io/serviceaccount/token"
+		logger.Debug("reading service account token", "path", tokenPath)
+		jwtBytes, err := os.ReadFile(tokenPath)
 		if err != nil {
 			return err
 		}
 		jwt := string(jwtBytes)
 
+		logger.Debug("authenticating as kubernetes service account", "role", role)
 		response, err := p.Vault.Auth.KubernetesLogin(ctx, schema.KubernetesLoginRequest{
 			Jwt:  jwt,
 			Role: role,
@@ -188,6 +194,7 @@ func (p *Pusher) AuthVault(ctx context.Context, address string, role string) err
 		token = response.Auth.ClientToken
 	}
 
+	logger.Debug("setting client token", "token", token)
 	err := p.Vault.SetToken(token)
 	if err != nil {
 		return err
