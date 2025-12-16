@@ -4,11 +4,15 @@ project_name: homelab-helper
 
 builds:
   - id: homelab-helper
+    env:
+      - CGO_ENABLED=0
     goos:
       - linux
     goarch:
       - arm64
       - amd64
+    flags:
+      - "-buildvcs=false"
     ldflags:
       - "-X {{ .ModulePath }}/internal/info.Version={{ .Version }}"
     main: ./cmd/homelab-helper
