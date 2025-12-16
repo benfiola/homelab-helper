@@ -1,10 +1,10 @@
-FROM alpine:3.22.2 as homelab_helper_builder
+FROM debian:bookworm-slim as homelab_helper_builder
 
 ARG TARGETPLATFORM
 
 COPY $TARGETPLATFORM/homelab-helper /usr/bin/
 
-FROM alpine:3.22.2
+FROM debian:bookworm-slim
 
 RUN <<EOF
 apt -y update
