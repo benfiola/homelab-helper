@@ -15,14 +15,10 @@ jobs:
     runs-on: ubuntu-latest
     container: golang:1.25.5-alpine
     steps:
-      - name: prepare container
+      - name: install dependencies
         run: |
-          # install dependencies
           apk update
           apk add docker git make
-
-          # configure git
-          git config --global --add safe.directory '*'
       - name: checkout
         uses: actions/checkout@v4
         with:
