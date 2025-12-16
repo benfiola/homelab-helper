@@ -1,7 +1,7 @@
 #!/bin/sh
 set -e
 
-apk update
-apk add make
+apt -y update
+DEBIAN_FRONTEND=noninteractive apt -y install make
 
 BIN=/usr/local/bin make install-tools
