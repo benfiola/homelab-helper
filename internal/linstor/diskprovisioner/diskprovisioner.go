@@ -63,8 +63,8 @@ func New(opts *Opts) (*DiskProvisioner, error) {
 	return &provisioner, nil
 }
 
-func (p *DiskProvisioner) ResolvePartitionLabel(ctx context.Context, label string) (string, error) {
-	symlink := fmt.Sprintf("/dev/disk/by-partlabel/%s", label)
+func (p *DiskProvisioner) ResolvePartitionLabel(ctx context.Context) (string, error) {
+	symlink := fmt.Sprintf("/dev/disk/by-partlabel/%s", p.PartitionLabel)
 	relPath, err := os.Readlink(symlink)
 	if err != nil {
 		return "", err
@@ -172,7 +172,10 @@ func (p *DiskProvisioner) ListLVs(ctx context.Context) ([]string, error) {
 	return lvs, nil
 }
 
-func (p *DiskProvisioner) CreateMetadataLV(ctx context.Context, pool string, lv string, satelliteID string) error {
+func (p *DiskProvisioner) CreateMetadataLV(ctx context.Context) error {
+	pool := fmt.Sprintf("/dev/%s/%s", p.VolumeGroup, p.Pool)
+	lv := fmt.Sprintf("/dev/%s/%s", p.VolumeGroup, p.MetadataLV)
+
 	err := p.Client.CreateLV(ctx, lvm2.ThinLV{
 		LV:   lv,
 		Pool: pool,
@@ -215,7 +218,7 @@ func (p *DiskProvisioner) Provision(ctx context.Context) error {
 	logger.Info("provisioning disks")
 
 	logger.Info("resolving symlink", "partition-label", p.PartitionLabel)
-	pv, err := p.ResolvePartitionLabel(ctx, p.PartitionLabel)
+	pv, err := p.ResolvePartitionLabel(ctx)
 	if err != nil {
 		return err
 	}
@@ -322,7 +325,7 @@ func (p *DiskProvisioner) Provision(ctx context.Context) error {
 	metadata := fmt.Sprintf("%s/%s", p.VolumeGroup, p.MetadataLV)
 	if !slices.Contains(lvs, metadata) {
 		logger.Info("creating metadata logical volume", "logical-volume", "metadata")
-		err = p.CreateMetadataLV(ctx, thinpool, metadata, p.SatelliteID)
+		err = p.CreateMetadataLV(ctx)
 		if err != nil {
 			return err
 		}

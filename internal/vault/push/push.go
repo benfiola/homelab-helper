@@ -115,8 +115,8 @@ func ParseStoragePath(storagePath string) (string, string, error) {
 	return bucket, path, nil
 }
 
-func (p *Pusher) ExportSecrets(ctx context.Context, secretsPath string) (map[string]any, error) {
-	response, err := p.Vault.Secrets.KvV2List(ctx, "", vault.WithMountPath(secretsPath))
+func (p *Pusher) ExportSecrets(ctx context.Context) (map[string]any, error) {
+	response, err := p.Vault.Secrets.KvV2List(ctx, "", vault.WithMountPath(p.SecretsPath))
 	if err != nil {
 		return nil, err
 	}
@@ -124,7 +124,7 @@ func (p *Pusher) ExportSecrets(ctx context.Context, secretsPath string) (map[str
 
 	data := map[string]any{}
 	for _, app := range apps {
-		response, err := p.Vault.Secrets.KvV2Read(ctx, app, vault.WithMountPath(secretsPath))
+		response, err := p.Vault.Secrets.KvV2Read(ctx, app, vault.WithMountPath(p.SecretsPath))
 		if err != nil {
 			return nil, err
 		}
@@ -145,8 +145,8 @@ func (p *Pusher) Checksum(ctx context.Context, data map[string]any) (string, err
 	return fmt.Sprintf("%x", hash), nil
 }
 
-func (p *Pusher) Upload(ctx context.Context, storagePath string, data map[string]any) error {
-	bucket, path, err := ParseStoragePath(storagePath)
+func (p *Pusher) Upload(ctx context.Context, data map[string]any) error {
+	bucket, path, err := ParseStoragePath(p.StoragePath)
 	if err != nil {
 		return err
 	}
@@ -168,7 +168,7 @@ func (p *Pusher) Upload(ctx context.Context, storagePath string, data map[string
 	return nil
 }
 
-func (p *Pusher) AuthVault(ctx context.Context, address string, role string) error {
+func (p *Pusher) AuthVault(ctx context.Context) error {
 	logger := logging.FromContext(ctx)
 
 	token := p.Token
@@ -182,10 +182,10 @@ func (p *Pusher) AuthVault(ctx context.Context, address string, role string) err
 		}
 		jwt := string(jwtBytes)
 
-		logger.Debug("authenticating as kubernetes service account", "role", role)
+		logger.Debug("authenticating as kubernetes service account", "role", p.Role)
 		response, err := p.Vault.Auth.KubernetesLogin(ctx, schema.KubernetesLoginRequest{
 			Jwt:  jwt,
-			Role: role,
+			Role: p.Role,
 		})
 		if err != nil {
 			return err
@@ -208,14 +208,14 @@ func (p *Pusher) Push(ctx context.Context) error {
 	logger.Info("pushing vault secrets to cloud storage")
 
 	logger.Info("logging into vault", "address", p.Address, "role", p.Role)
-	err := p.AuthVault(ctx, p.Address, p.Role)
+	err := p.AuthVault(ctx)
 	if err != nil {
 		return err
 	}
 	defer p.Vault.ClearToken()
 
 	logger.Info("exporting secrets", "address", p.Address)
-	secrets, err := p.ExportSecrets(ctx, p.SecretsPath)
+	secrets, err := p.ExportSecrets(ctx)
 	if err != nil {
 		return err
 	}
@@ -232,7 +232,7 @@ func (p *Pusher) Push(ctx context.Context) error {
 	p.LastChecksum = checksum
 
 	logger.Info("uploading secrets", "storage-path", p.StoragePath)
-	err = p.Upload(ctx, p.StoragePath, secrets)
+	err = p.Upload(ctx, secrets)
 	if err != nil {
 		return err
 	}

@@ -56,21 +56,21 @@ func New(opts *Opts) (*Unsealer, error) {
 	return &unsealer, nil
 }
 
-func (u *Unsealer) WaitForPath(ctx context.Context, path string) {
+func (u *Unsealer) WaitForPath(ctx context.Context) {
 	logger := logging.FromContext(ctx)
 
 	for {
-		_, err := os.Lstat(path)
+		_, err := os.Lstat(u.UnsealKeyPath)
 		if err != nil {
 			time.Sleep(1 * time.Second)
 			continue
 		}
-		logger.Debug("path lstat failed", "error", err, "path", path)
+		logger.Debug("path lstat failed", "error", err, "path", u.UnsealKeyPath)
 		break
 	}
 }
 
-func (u *Unsealer) WaitForVault(ctx context.Context, address string) {
+func (u *Unsealer) WaitForVault(ctx context.Context) {
 	logger := logging.FromContext(ctx)
 
 	for {
@@ -88,10 +88,10 @@ func (u *Unsealer) Unseal(ctx context.Context) error {
 	logger.Info("unsealing vault")
 
 	logger.Info("waiting for unseal key", "unseal-key-path", u.UnsealKeyPath)
-	u.WaitForPath(ctx, u.UnsealKeyPath)
+	u.WaitForPath(ctx)
 
 	logger.Info("waiting for vault", "address", u.Address)
-	u.WaitForVault(ctx, u.Address)
+	u.WaitForVault(ctx)
 
 	response, err := u.Vault.System.SealStatus(ctx)
 	if err != nil {
