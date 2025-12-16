@@ -5,22 +5,28 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
+	"strings"
 
 	"github.com/benfiola/homelab-helper/internal/logging"
 	"github.com/benfiola/homelab-helper/internal/lvm2"
+	"github.com/benfiola/homelab-helper/internal/process"
 	"github.com/benfiola/homelab-helper/internal/ptr"
 )
 
 type Opts struct {
 	PartitionLabel string
 	Pool           string
+	SatelliteID    string
 	VolumeGroup    string
 }
 
 type DiskProvisioner struct {
 	Client         *lvm2.Client
+	MetadataLV     string
 	PartitionLabel string
 	Pool           string
+	SatelliteID    string
 	VolumeGroup    string
 }
 
@@ -38,14 +44,20 @@ func New(opts *Opts) (*DiskProvisioner, error) {
 		return nil, fmt.Errorf("pool unset")
 	}
 
+	if opts.SatelliteID == "" {
+		return nil, fmt.Errorf("satellite id unset")
+	}
+
 	if opts.VolumeGroup == "" {
 		return nil, fmt.Errorf("volume group unset")
 	}
 
 	provisioner := DiskProvisioner{
 		Client:         client,
+		MetadataLV:     "metadata",
 		PartitionLabel: opts.PartitionLabel,
 		Pool:           opts.Pool,
+		SatelliteID:    opts.SatelliteID,
 		VolumeGroup:    opts.VolumeGroup,
 	}
 	return &provisioner, nil
@@ -64,61 +76,100 @@ func (p *DiskProvisioner) ResolvePartitionLabel(ctx context.Context, label strin
 	return absPath, nil
 }
 
-func (p *DiskProvisioner) ExistsPV(ctx context.Context, pv string) (bool, error) {
+func (p *DiskProvisioner) GetSatelliteID(ctx context.Context) (string, error) {
+	device := fmt.Sprintf("/dev/%s/%s", p.VolumeGroup, p.MetadataLV)
+	_, err := os.Lstat(device)
+	if err != nil {
+		return "", nil
+	}
+
+	mount := "/mnt/metadata"
+	err = os.MkdirAll(mount, 0755)
+	if err != nil {
+		return "", err
+	}
+
+	_, err = process.Output(ctx, []string{"mount", device, mount})
+	if err != nil {
+		return "", err
+	}
+
+	file := fmt.Sprintf("%s/satellite-id", mount)
+	dataBytes, err := os.ReadFile(file)
+	if err != nil {
+		return "", nil
+	}
+
+	data := string(dataBytes)
+	data = strings.TrimSpace(data)
+	return data, nil
+}
+
+func (p *DiskProvisioner) ListPVs(ctx context.Context) ([]string, error) {
 	data, err := p.Client.ShowPV(ctx)
 	if err != nil {
-		return false, err
+		return nil, err
 	}
 
-	found := false
+	pvMap := map[string]bool{}
 	for _, item := range data.Report {
 		for _, currPv := range item.PV {
-			if currPv.PVName == pv {
-				found = true
-				break
-			}
+			pvMap[currPv.PVName] = true
 		}
 	}
 
-	return found, nil
+	pvs := []string{}
+	for pv := range pvMap {
+		pvs = append(pvs, pv)
+	}
+
+	return pvs, nil
 }
 
-func (p *DiskProvisioner) ExistsVG(ctx context.Context, vg string) (bool, error) {
+func (p *DiskProvisioner) ListVGs(ctx context.Context) ([]string, error) {
 	data, err := p.Client.ShowVG(ctx)
 	if err != nil {
-		return false, err
+		return nil, err
 	}
 
-	found := false
+	vgMap := map[string]bool{}
 	for _, item := range data.Report {
 		for _, currVg := range item.VG {
-			if currVg.VGName == vg {
-				found = true
-				break
-			}
+			vgMap[currVg.VGName] = true
 		}
 	}
 
-	return found, nil
+	vgs := []string{}
+	for vg := range vgMap {
+		vgs = append(vgs, vg)
+	}
+
+	return vgs, nil
 }
 
-func (p *DiskProvisioner) ExistsLV(ctx context.Context, lv string) (bool, error) {
+func (p *DiskProvisioner) ListLVs(ctx context.Context, lv string) ([]string, error) {
 	data, err := p.Client.ShowLV(ctx)
 	if err != nil {
-		return false, err
+		return nil, err
 	}
 
-	found := false
+	lvMap := map[string]bool{}
 	for _, item := range data.Report {
 		for _, currLv := range item.LV {
-			if currLv.LVName == lv {
-				found = true
-				break
-			}
+			lvMap[currLv.LVName] = true
 		}
 	}
 
-	return found, nil
+	lvs := []string{}
+	for lv := range lvMap {
+		lvs = append(lvs, lv)
+	}
+
+	return lvs, nil
+}
+
+func (p *DiskProvisioner) PruneOrphanLVs(ctx context.Context, lv string) error {
+	return nil
 }
 
 func (p *DiskProvisioner) Provision(ctx context.Context) error {
@@ -131,12 +182,63 @@ func (p *DiskProvisioner) Provision(ctx context.Context) error {
 		return err
 	}
 
-	existsPV, err := p.ExistsPV(ctx, pv)
+	logger.Info("listing all pvs")
+	pvs, err := p.ListPVs(ctx)
 	if err != nil {
 		return err
 	}
 
-	if !existsPV {
+	logger.Info("listing all vgs")
+	vgs, err := p.ListVGs(ctx)
+	if err != nil {
+		return err
+	}
+
+	logger.Info("getting known satellite id")
+	satelliteId, err := p.GetSatelliteID(ctx)
+	if err != nil {
+		return err
+	}
+
+	if p.SatelliteID != satelliteId {
+		logger.Info("satellite id differs", "known", satelliteId, "expected", p.SatelliteID)
+
+		for _, vg := range vgs {
+			logger.Info("removing all logical volumes for volume group", "volume-group", vg)
+			err := p.Client.RemoveAllLVs(ctx, vg)
+			if err != nil {
+				return err
+			}
+
+			logger.Info("removing volume group", "volume-group", vg)
+			err = p.Client.RemoveVG(ctx, vg)
+			if err != nil {
+				return err
+			}
+		}
+
+		for _, pv := range pvs {
+			logger.Info("removing pv", "physical-volume", pv)
+			err = p.Client.RemovePV(ctx, pv)
+			if err != nil {
+				return err
+			}
+		}
+
+		logger.Info("listing all pvs")
+		pvs, err = p.ListPVs(ctx)
+		if err != nil {
+			return err
+		}
+
+		logger.Info("listing all vgs")
+		vgs, err = p.ListVGs(ctx)
+		if err != nil {
+			return err
+		}
+	}
+
+	if !slices.Contains(pvs, pv) {
 		logger.Info("creating physical volume", "physical-volume", pv)
 		err = p.Client.CreatePV(ctx, pv)
 		if err != nil {
@@ -150,12 +252,7 @@ func (p *DiskProvisioner) Provision(ctx context.Context) error {
 		return err
 	}
 
-	existsVG, err := p.ExistsVG(ctx, p.VolumeGroup)
-	if err != nil {
-		return err
-	}
-
-	if !existsVG {
+	if !slices.Contains(vgs, p.VolumeGroup) {
 		logger.Info("creating volume group", "physical-volume", pv, "volume-group", p.VolumeGroup)
 		err = p.Client.CreateVG(ctx, p.VolumeGroup, pv)
 		if err != nil {
@@ -163,13 +260,13 @@ func (p *DiskProvisioner) Provision(ctx context.Context) error {
 		}
 	}
 
-	existsLV, err := p.ExistsLV(ctx, p.Pool)
+	lvs, err := p.ListLVs(ctx, p.Pool)
 	if err != nil {
 		return err
 	}
 
 	lv := fmt.Sprintf("%s/%s", p.VolumeGroup, p.Pool)
-	if !existsLV {
+	if !slices.Contains(lvs, lv) {
 		logger.Info("creating logical volume", "logical-volume", lv)
 		err = p.Client.CreateLV(ctx, lvm2.ThinLV{
 			ChunkSize: "512K",
@@ -184,6 +281,7 @@ func (p *DiskProvisioner) Provision(ctx context.Context) error {
 	logger.Info("extending logical volume", "logical-volume", lv)
 	p.Client.ExtendLV(ctx, lv, "")
 
+	logger.Info("pruning orphaned logical volumes")
 	return nil
 }
 

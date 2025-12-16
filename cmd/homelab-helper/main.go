@@ -46,6 +46,11 @@ func main() {
 						Sources:  cli.EnvVars("POOL"),
 					},
 					&cli.StringFlag{
+						Name:     "satellite-id",
+						Required: true,
+						Sources:  cli.EnvVars("SATELLITE_ID"),
+					},
+					&cli.StringFlag{
 						Name:     "volume-group",
 						Required: true,
 						Sources:  cli.EnvVars("VOLUME_GROUP"),
@@ -54,11 +59,13 @@ func main() {
 				Action: func(ctx context.Context, c *cli.Command) error {
 					partitionLabel := c.String("partition-label")
 					pool := c.String("pool")
+					satelliteId := c.String("satellite-id")
 					volumeGroup := c.String("volume-group")
 
 					provisioner, err := diskprovisioner.New(&diskprovisioner.Opts{
 						PartitionLabel: partitionLabel,
 						Pool:           pool,
+						SatelliteID:    satelliteId,
 						VolumeGroup:    volumeGroup,
 					})
 					if err != nil {

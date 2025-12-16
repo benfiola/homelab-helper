@@ -60,8 +60,26 @@ func (c *Client) ResizePV(ctx context.Context, device string) error {
 	return nil
 }
 
+func (c *Client) RemovePV(ctx context.Context, device string) error {
+	_, err := process.Output(ctx, []string{"pvremove", "-f", device})
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
 func (c *Client) CreateVG(ctx context.Context, name string, device string) error {
 	_, err := process.Output(ctx, []string{"vgcreate", name, device})
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (c *Client) RemoveVG(ctx context.Context, name string) error {
+	_, err := process.Output(ctx, []string{"vgremove", "-f", name})
 	if err != nil {
 		return err
 	}
@@ -92,7 +110,13 @@ func (c *Client) ShowVG(ctx context.Context) (*VGInfo, error) {
 	return &vgInfo, nil
 }
 
-type ThinLV struct {
+type LV struct {
+	LV   string
+	Pool string
+	Size string
+}
+
+type ThinLVPool struct {
 	ChunkSize string
 	LV        string
 	Size      string
@@ -102,28 +126,30 @@ type ThinLV struct {
 func (c *Client) CreateLV(ctx context.Context, lv any) error {
 	command := []string{"lvcreate"}
 
-	if tlv, ok := lv.(ThinLV); ok {
-		size := tlv.Size
+	if tplv, ok := lv.(ThinLVPool); ok {
+		size := tplv.Size
 		if size == "" {
 			size = "100%FREE"
 		}
 
 		var zeroStr string
-		if tlv.Zero != nil {
-			if *tlv.Zero {
+		if tplv.Zero != nil {
+			if *tplv.Zero {
 				zeroStr = "y"
 			} else {
 				zeroStr = "n"
 			}
 		}
 
-		command = append(command, "--extents", size, "--thin", tlv.LV)
-		if tlv.ChunkSize != "" {
-			command = append(command, "--chunksize", tlv.ChunkSize)
+		command = append(command, "--extents", size, "--thinpool", tplv.LV)
+		if tplv.ChunkSize != "" {
+			command = append(command, "--chunksize", tplv.ChunkSize)
 		}
 		if zeroStr != "" {
 			command = append(command, "--zero", zeroStr)
 		}
+	} else if tlv, ok := lv.(ThinLV); ok {
+		
 	} else {
 		return fmt.Errorf("unimplemented")
 	}
@@ -165,6 +191,15 @@ func (c *Client) ExtendLV(ctx context.Context, volume string, size string) error
 	}
 
 	_, err := process.Output(ctx, []string{"lvextend", "--extents", size, volume})
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (c *Client) RemoveAllLVs(ctx context.Context, vg string) error {
+	_, err := process.Output(ctx, []string{"lvremove", "-f", vg})
 	if err != nil {
 		return err
 	}
