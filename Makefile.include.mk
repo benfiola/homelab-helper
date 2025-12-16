@@ -1,12 +1,12 @@
-define tool-from-apt
+define tool-from-apk
 install-tools: install-tools__$(1)
 .PHONY: install-tools__$(1)
 install-tools__$(1): $$(BIN)/$(1)
 $$(BIN)/$(1): | $$(BIN)
 	# update package index
-	apt -y update
+	apk update
 	# install $(2)
-	DEBIAN_FRONTEND=noninteractive apt -y install $(2)
+	apk add $(2)
 	# maybe symlink $(1)
 	SRC="$$$$(which $(1))" DST="$$(BIN)/$(1)" && if [ "$$$${SRC}" != "$$$${DST}" ]; then ln -fs "$$$${SRC}" "$$$${DST}"; fi;
 endef

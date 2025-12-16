@@ -25,8 +25,9 @@ list-targets:
 .PHONY: install-tools
 install-tools:
 
-$(eval $(call tool-from-apt,bsdtar,libarchive-tools))
-$(eval $(call tool-from-apt,curl,curl))
+$(eval $(call tool-from-apk,bsdtar,libarchive-tools))
+$(eval $(call tool-from-apk,curl,curl))
+$(eval $(call tool-from-apk,git,git))
 
 goreleaser_arch := $(arch)
 ifeq ($(goreleaser_arch),amd64)
