@@ -179,6 +179,7 @@ func (p *DiskProvisioner) CreateMetadataLV(ctx context.Context) error {
 	err := p.Client.CreateLV(ctx, lvm2.ThinLV{
 		LV:   lv,
 		Pool: pool,
+		Size: "100M",
 	})
 	if err != nil {
 		return err

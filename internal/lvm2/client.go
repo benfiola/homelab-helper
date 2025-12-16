@@ -156,10 +156,15 @@ func (c *Client) CreateLV(ctx context.Context, lv any) error {
 		}
 		command = append(command, tplv.LV)
 	} else if tlv, ok := lv.(ThinLV); ok {
-		if tlv.Size != "" {
-			command = append(command, "--virtualsize", tlv.Size)
+		if tlv.Pool == "" {
+			return fmt.Errorf("thin lv pool unset")
 		}
-		command = append(command, "--thin", "--thinpool", tlv.Pool, tlv.LV)
+		if tlv.Size == "" {
+			return fmt.Errorf("thin lv size unset")
+		}
+
+		command = append(command, "--type", "thin", "--virtualsize", tlv.Size, "--thinpool", tlv.Pool)
+		command = append(command, tlv.LV)
 	} else {
 		return fmt.Errorf("unimplemented")
 	}
