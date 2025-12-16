@@ -15,10 +15,10 @@ jobs:
     runs-on: ubuntu-latest
     container: golang:1.25.5-alpine
     steps:
-      - name: install dependencies
+      - name: install github dependencies
         run: |
           apk update
-          apk add docker make
+          apk add docker
       - name: checkout
         uses: actions/checkout@v4
         with:
