@@ -110,7 +110,7 @@ func (c *Client) ShowVG(ctx context.Context) (*VGInfo, error) {
 	return &vgInfo, nil
 }
 
-type LV struct {
+type ThinLV struct {
 	LV   string
 	Pool string
 	Size string
@@ -127,9 +127,9 @@ func (c *Client) CreateLV(ctx context.Context, lv any) error {
 	command := []string{"lvcreate"}
 
 	if tplv, ok := lv.(ThinLVPool); ok {
-		size := tplv.Size
-		if size == "" {
-			size = "100%FREE"
+		extents := ""
+		if tplv.Size == "" {
+			extents = "100%FREE"
 		}
 
 		var zeroStr string
@@ -141,15 +141,25 @@ func (c *Client) CreateLV(ctx context.Context, lv any) error {
 			}
 		}
 
-		command = append(command, "--extents", size, "--thinpool", tplv.LV)
+		command = append(command, "--type", "thin-pool")
+		if tplv.Size != "" {
+			command = append(command, "--size", tplv.Size)
+		}
+		if extents != "" {
+			command = append(command, "--extents", extents)
+		}
 		if tplv.ChunkSize != "" {
 			command = append(command, "--chunksize", tplv.ChunkSize)
 		}
 		if zeroStr != "" {
 			command = append(command, "--zero", zeroStr)
 		}
+		command = append(command, tplv.LV)
 	} else if tlv, ok := lv.(ThinLV); ok {
-		
+		if tlv.Size != "" {
+			command = append(command, "--virtualsize", tlv.Size)
+		}
+		command = append(command, "--thin", "--thinpool", tlv.Pool, tlv.LV)
 	} else {
 		return fmt.Errorf("unimplemented")
 	}

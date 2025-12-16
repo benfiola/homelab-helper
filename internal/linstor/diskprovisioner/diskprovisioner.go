@@ -64,14 +64,15 @@ func New(opts *Opts) (*DiskProvisioner, error) {
 }
 
 func (p *DiskProvisioner) ResolvePartitionLabel(ctx context.Context, label string) (string, error) {
-	symlink := fmt.Sprintf("/dev/disk/by-partlabel/%s", p.PartitionLabel)
+	symlink := fmt.Sprintf("/dev/disk/by-partlabel/%s", label)
 	relPath, err := os.Readlink(symlink)
 	if err != nil {
 		return "", err
 	}
+
 	absPath := filepath.Join(filepath.Dir(symlink), relPath)
 	if absPath == symlink {
-		return "", fmt.Errorf("could not resolve device symlink '%s", symlink)
+		return "", fmt.Errorf("could not resolve device symlink '%s'", symlink)
 	}
 	return absPath, nil
 }
@@ -83,16 +84,19 @@ func (p *DiskProvisioner) GetSatelliteID(ctx context.Context) (string, error) {
 		return "", nil
 	}
 
-	mount := "/mnt/metadata"
-	err = os.MkdirAll(mount, 0755)
+	mount, err := os.MkdirTemp("", "")
 	if err != nil {
 		return "", err
 	}
+	defer os.RemoveAll(mount)
 
 	_, err = process.Output(ctx, []string{"mount", device, mount})
 	if err != nil {
 		return "", err
 	}
+	defer func() {
+		process.Output(ctx, []string{"unmount", mount})
+	}()
 
 	file := fmt.Sprintf("%s/satellite-id", mount)
 	dataBytes, err := os.ReadFile(file)
@@ -147,7 +151,7 @@ func (p *DiskProvisioner) ListVGs(ctx context.Context) ([]string, error) {
 	return vgs, nil
 }
 
-func (p *DiskProvisioner) ListLVs(ctx context.Context, lv string) ([]string, error) {
+func (p *DiskProvisioner) ListLVs(ctx context.Context) ([]string, error) {
 	data, err := p.Client.ShowLV(ctx)
 	if err != nil {
 		return nil, err
@@ -168,7 +172,41 @@ func (p *DiskProvisioner) ListLVs(ctx context.Context, lv string) ([]string, err
 	return lvs, nil
 }
 
-func (p *DiskProvisioner) PruneOrphanLVs(ctx context.Context, lv string) error {
+func (p *DiskProvisioner) CreateMetadataLV(ctx context.Context, pool string, lv string, satelliteID string) error {
+	err := p.Client.CreateLV(ctx, lvm2.ThinLV{
+		LV:   lv,
+		Pool: pool,
+	})
+	if err != nil {
+		return err
+	}
+
+	_, err = process.Output(ctx, []string{"mkfs.ext4", lv})
+	if err != nil {
+		return err
+	}
+
+	mount, err := os.MkdirTemp("", "")
+	if err != nil {
+		return err
+	}
+	defer os.RemoveAll(mount)
+
+	_, err = process.Output(ctx, []string{"mount", lv, mount})
+	if err != nil {
+		return err
+	}
+	defer func() {
+		process.Output(ctx, []string{"unmount", mount})
+	}()
+
+	file := fmt.Sprintf("%s/satellite-id", mount)
+
+	err = os.WriteFile(file, []byte(p.SatelliteID), 0644)
+	if err != nil {
+		return err
+	}
+
 	return nil
 }
 
@@ -195,13 +233,13 @@ func (p *DiskProvisioner) Provision(ctx context.Context) error {
 	}
 
 	logger.Info("getting known satellite id")
-	satelliteId, err := p.GetSatelliteID(ctx)
+	satelliteID, err := p.GetSatelliteID(ctx)
 	if err != nil {
 		return err
 	}
 
-	if p.SatelliteID != satelliteId {
-		logger.Info("satellite id differs", "known", satelliteId, "expected", p.SatelliteID)
+	if p.SatelliteID != satelliteID {
+		logger.Info("satellite id differs", "known", satelliteID, "expected", p.SatelliteID)
 
 		for _, vg := range vgs {
 			logger.Info("removing all logical volumes for volume group", "volume-group", vg)
@@ -225,13 +263,13 @@ func (p *DiskProvisioner) Provision(ctx context.Context) error {
 			}
 		}
 
-		logger.Info("listing all pvs")
+		logger.Info("(re-)listing all pvs")
 		pvs, err = p.ListPVs(ctx)
 		if err != nil {
 			return err
 		}
 
-		logger.Info("listing all vgs")
+		logger.Info("(re-)listing all vgs")
 		vgs, err = p.ListVGs(ctx)
 		if err != nil {
 			return err
@@ -260,17 +298,17 @@ func (p *DiskProvisioner) Provision(ctx context.Context) error {
 		}
 	}
 
-	lvs, err := p.ListLVs(ctx, p.Pool)
+	lvs, err := p.ListLVs(ctx)
 	if err != nil {
 		return err
 	}
 
-	lv := fmt.Sprintf("%s/%s", p.VolumeGroup, p.Pool)
-	if !slices.Contains(lvs, lv) {
-		logger.Info("creating logical volume", "logical-volume", lv)
-		err = p.Client.CreateLV(ctx, lvm2.ThinLV{
+	thinpool := fmt.Sprintf("%s/%s", p.VolumeGroup, p.Pool)
+	if !slices.Contains(lvs, thinpool) {
+		logger.Info("creating thin pool", "logical-volume", thinpool)
+		err = p.Client.CreateLV(ctx, lvm2.ThinLVPool{
 			ChunkSize: "512K",
-			LV:        lv,
+			LV:        thinpool,
 			Zero:      ptr.Get(false),
 		})
 		if err != nil {
@@ -278,10 +316,18 @@ func (p *DiskProvisioner) Provision(ctx context.Context) error {
 		}
 	}
 
-	logger.Info("extending logical volume", "logical-volume", lv)
-	p.Client.ExtendLV(ctx, lv, "")
+	logger.Info("extending thin pool", "logical-volume", thinpool)
+	p.Client.ExtendLV(ctx, thinpool, "")
 
-	logger.Info("pruning orphaned logical volumes")
+	metadata := fmt.Sprintf("%s/%s", p.VolumeGroup, p.MetadataLV)
+	if !slices.Contains(lvs, metadata) {
+		logger.Info("creating metadata logical volume", "logical-volume", "metadata")
+		err = p.CreateMetadataLV(ctx, thinpool, metadata, p.SatelliteID)
+		if err != nil {
+			return err
+		}
+	}
+
 	return nil
 }
 
