@@ -200,6 +200,7 @@ type LVInfo struct {
 	Report []struct {
 		LV []struct {
 			LVName string `json:"lv_name"`
+			VGName string `json:"vg_name"`
 		} `json:"lv"`
 	} `json:"report"`
 }

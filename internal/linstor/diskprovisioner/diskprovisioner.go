@@ -181,8 +181,9 @@ func (p *DiskProvisioner) ListLVs(ctx context.Context) ([]string, error) {
 
 	lvMap := map[string]bool{}
 	for _, item := range data.Report {
-		for _, currLv := range item.LV {
-			lvMap[currLv.LVName] = true
+		for _, lv := range item.LV {
+			name := fmt.Sprintf("%s/%s", lv.VGName, lv.LVName)
+			lvMap[name] = true
 		}
 	}
 
