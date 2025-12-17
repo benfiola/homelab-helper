@@ -64,48 +64,63 @@ func New(opts *Opts) (*DiskProvisioner, error) {
 }
 
 func (p *DiskProvisioner) ResolvePartitionLabel(ctx context.Context) (string, error) {
+	logger := logging.FromContext(ctx)
 	symlink := fmt.Sprintf("/dev/disk/by-partlabel/%s", p.PartitionLabel)
+	logger.Debug("resolving partition label symlink", "symlink", symlink)
+
 	relPath, err := os.Readlink(symlink)
 	if err != nil {
+		logger.Error("failed to read symlink", "symlink", symlink, "error", err)
 		return "", err
 	}
 
 	absPath := filepath.Join(filepath.Dir(symlink), relPath)
 	if absPath == symlink {
+		logger.Error("symlink resolution failed - circular reference", "symlink", symlink)
 		return "", fmt.Errorf("could not resolve device symlink '%s'", symlink)
 	}
+
+	logger.Info("resolved partition label to device", "partition-label", p.PartitionLabel, "device", absPath)
 	return absPath, nil
 }
 
 func (p *DiskProvisioner) GetSatelliteID(ctx context.Context) (string, error) {
+	logger := logging.FromContext(ctx)
 	device := fmt.Sprintf("/dev/%s/%s", p.VolumeGroup, p.MetadataLV)
+
 	_, err := os.Lstat(device)
 	if err != nil {
+		logger.Debug("metadata device does not exist, satellite id unavailable", "device", device)
 		return "", nil
 	}
 
+	logger.Debug("mounting metadata device to read satellite id", "device", device)
 	mount, err := os.MkdirTemp("", "")
 	if err != nil {
+		logger.Error("failed to create temporary mount directory", "error", err)
 		return "", err
 	}
 	defer os.RemoveAll(mount)
 
 	_, err = process.Output(ctx, []string{"mount", device, mount})
 	if err != nil {
+		logger.Error("failed to mount metadata device", "device", device, "mount-point", mount, "error", err)
 		return "", err
 	}
 	defer func() {
-		process.Output(ctx, []string{"unmount", mount})
+		process.Output(ctx, []string{"umount", mount})
 	}()
 
 	file := fmt.Sprintf("%s/satellite-id", mount)
 	dataBytes, err := os.ReadFile(file)
 	if err != nil {
+		logger.Debug("failed to read satellite-id file", "file", file, "error", err)
 		return "", nil
 	}
 
 	data := string(dataBytes)
 	data = strings.TrimSpace(data)
+	logger.Info("retrieved satellite id from metadata", "satellite-id", data)
 	return data, nil
 }
 
@@ -114,8 +129,12 @@ func (p *DiskProvisioner) GroupAndVolume(vg string, lv string) string {
 }
 
 func (p *DiskProvisioner) ListPVs(ctx context.Context) ([]string, error) {
+	logger := logging.FromContext(ctx)
+	logger.Debug("querying physical volumes")
+
 	data, err := p.Client.ShowPV(ctx)
 	if err != nil {
+		logger.Error("failed to query physical volumes", "error", err)
 		return nil, err
 	}
 
@@ -131,12 +150,17 @@ func (p *DiskProvisioner) ListPVs(ctx context.Context) ([]string, error) {
 		pvs = append(pvs, pv)
 	}
 
+	logger.Debug("found physical volumes", "count", len(pvs), "pvs", pvs)
 	return pvs, nil
 }
 
 func (p *DiskProvisioner) ListVGs(ctx context.Context) ([]string, error) {
+	logger := logging.FromContext(ctx)
+	logger.Debug("querying volume groups")
+
 	data, err := p.Client.ShowVG(ctx)
 	if err != nil {
+		logger.Error("failed to query volume groups", "error", err)
 		return nil, err
 	}
 
@@ -152,12 +176,17 @@ func (p *DiskProvisioner) ListVGs(ctx context.Context) ([]string, error) {
 		vgs = append(vgs, vg)
 	}
 
+	logger.Debug("found volume groups", "count", len(vgs), "vgs", vgs)
 	return vgs, nil
 }
 
 func (p *DiskProvisioner) ListLVs(ctx context.Context) ([]string, error) {
+	logger := logging.FromContext(ctx)
+	logger.Debug("querying logical volumes")
+
 	data, err := p.Client.ShowLV(ctx)
 	if err != nil {
+		logger.Error("failed to query logical volumes", "error", err)
 		return nil, err
 	}
 
@@ -173,10 +202,14 @@ func (p *DiskProvisioner) ListLVs(ctx context.Context) ([]string, error) {
 		lvs = append(lvs, lv)
 	}
 
+	logger.Debug("found logical volumes", "count", len(lvs), "lvs", lvs)
 	return lvs, nil
 }
 
 func (p *DiskProvisioner) CreateMetadataLV(ctx context.Context) error {
+	logger := logging.FromContext(ctx)
+	logger.Info("creating metadata logical volume", "lv-name", p.MetadataLV, "size", "100M", "pool", p.Pool)
+
 	err := p.Client.CreateLV(ctx, lvm2.ThinLV{
 		LogicalVolume: p.MetadataLV,
 		Pool:          p.Pool,
@@ -184,36 +217,46 @@ func (p *DiskProvisioner) CreateMetadataLV(ctx context.Context) error {
 		VolumeGroup:   p.VolumeGroup,
 	})
 	if err != nil {
+		logger.Error("failed to create metadata logical volume", "error", err)
 		return err
 	}
 
 	device := fmt.Sprintf("/dev/%s/%s", p.VolumeGroup, p.MetadataLV)
+	logger.Debug("formatting metadata device with ext4", "device", device)
+
 	_, err = process.Output(ctx, []string{"mkfs.ext4", device})
 	if err != nil {
+		logger.Error("failed to format metadata device", "device", device, "error", err)
 		return err
 	}
 
 	mount, err := os.MkdirTemp("", "")
 	if err != nil {
+		logger.Error("failed to create temporary mount directory", "error", err)
 		return err
 	}
 	defer os.RemoveAll(mount)
 
+	logger.Debug("mounting metadata device", "device", device, "mount-point", mount)
 	_, err = process.Output(ctx, []string{"mount", device, mount})
 	if err != nil {
+		logger.Error("failed to mount metadata device", "device", device, "error", err)
 		return err
 	}
 	defer func() {
-		process.Output(ctx, []string{"unmount", mount})
+		process.Output(ctx, []string{"umount", mount})
 	}()
 
 	file := fmt.Sprintf("%s/satellite-id", mount)
+	logger.Debug("writing satellite id to metadata file", "file", file, "satellite-id", p.SatelliteID)
 
 	err = os.WriteFile(file, []byte(p.SatelliteID), 0644)
 	if err != nil {
+		logger.Error("failed to write satellite-id file", "file", file, "error", err)
 		return err
 	}
 
+	logger.Info("successfully created and initialized metadata logical volume")
 	return nil
 }
 
@@ -338,10 +381,15 @@ func (p *DiskProvisioner) Provision(ctx context.Context) error {
 }
 
 func (p *DiskProvisioner) Run(ctx context.Context) error {
+	logger := logging.FromContext(ctx)
+	logger.Info("starting disk provisioning process")
+
 	err := p.Provision(ctx)
 	if err != nil {
+		logger.Error("disk provisioning failed", "error", err)
 		return err
 	}
 
+	logger.Info("disk provisioning completed successfully")
 	return nil
 }
