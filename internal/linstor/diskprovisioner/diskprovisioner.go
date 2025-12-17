@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/benfiola/homelab-helper/internal/logging"
 	"github.com/benfiola/homelab-helper/internal/lvm2"
@@ -383,10 +384,24 @@ func (p *DiskProvisioner) Run(ctx context.Context) error {
 	logger := logging.FromContext(ctx)
 	logger.Info("starting disk provisioning")
 
-	err := p.Provision(ctx)
-	if err != nil {
+	failureMarker := "/tmp/.disk-provisioner-wait"
+	failureMarkerExists := func() bool {
+		_, err := os.Lstat(failureMarker)
+		return err == nil
+	}
+
+	for {
+		err := p.Provision(ctx)
+		if err == nil {
+			break
+		}
 		logger.Error("disk provisioning failed", "error", err)
-		return err
+
+		logger.Error("waiting for failure marker to clear", "marker", failureMarker)
+		os.WriteFile(failureMarker, []byte(""), 0644)
+		for failureMarkerExists() {
+			time.Sleep(1 * time.Second)
+		}
 	}
 
 	return nil
