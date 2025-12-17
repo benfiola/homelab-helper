@@ -109,6 +109,10 @@ func (p *DiskProvisioner) GetSatelliteID(ctx context.Context) (string, error) {
 	return data, nil
 }
 
+func (p *DiskProvisioner) GroupAndVolume(vg string, lv string) string {
+	return fmt.Sprintf("%s/%s", vg, lv)
+}
+
 func (p *DiskProvisioner) ListPVs(ctx context.Context) ([]string, error) {
 	data, err := p.Client.ShowPV(ctx)
 	if err != nil {
@@ -173,19 +177,18 @@ func (p *DiskProvisioner) ListLVs(ctx context.Context) ([]string, error) {
 }
 
 func (p *DiskProvisioner) CreateMetadataLV(ctx context.Context) error {
-	pool := fmt.Sprintf("/dev/%s/%s", p.VolumeGroup, p.Pool)
-	lv := fmt.Sprintf("/dev/%s/%s", p.VolumeGroup, p.MetadataLV)
-
 	err := p.Client.CreateLV(ctx, lvm2.ThinLV{
-		LV:   lv,
-		Pool: pool,
-		Size: "100M",
+		LogicalVolume: p.MetadataLV,
+		Pool:          p.Pool,
+		Size:          "100M",
+		VolumeGroup:   p.VolumeGroup,
 	})
 	if err != nil {
 		return err
 	}
 
-	_, err = process.Output(ctx, []string{"mkfs.ext4", lv})
+	device := fmt.Sprintf("/dev/%s/%s", p.VolumeGroup, p.MetadataLV)
+	_, err = process.Output(ctx, []string{"mkfs.ext4", device})
 	if err != nil {
 		return err
 	}
@@ -196,7 +199,7 @@ func (p *DiskProvisioner) CreateMetadataLV(ctx context.Context) error {
 	}
 	defer os.RemoveAll(mount)
 
-	_, err = process.Output(ctx, []string{"mount", lv, mount})
+	_, err = process.Output(ctx, []string{"mount", device, mount})
 	if err != nil {
 		return err
 	}
@@ -307,25 +310,24 @@ func (p *DiskProvisioner) Provision(ctx context.Context) error {
 		return err
 	}
 
-	thinpool := fmt.Sprintf("%s/%s", p.VolumeGroup, p.Pool)
-	if !slices.Contains(lvs, thinpool) {
-		logger.Info("creating thin pool", "logical-volume", thinpool)
+	if !slices.Contains(lvs, p.GroupAndVolume(p.VolumeGroup, p.Pool)) {
+		logger.Info("creating thin pool", "logical-volume", p.Pool)
 		err = p.Client.CreateLV(ctx, lvm2.ThinLVPool{
-			ChunkSize: "512K",
-			LV:        thinpool,
-			Zero:      ptr.Get(false),
+			ChunkSize:     "512K",
+			LogicalVolume: p.Pool,
+			VolumeGroup:   p.VolumeGroup,
+			Zero:          ptr.Get(false),
 		})
 		if err != nil {
 			return err
 		}
 	}
 
-	logger.Info("extending thin pool", "logical-volume", thinpool)
-	p.Client.ExtendLV(ctx, thinpool, "")
+	logger.Info("extending thin pool", "logical-volume", p.Pool)
+	p.Client.ExtendLV(ctx, p.VolumeGroup, p.Pool, "")
 
-	metadata := fmt.Sprintf("%s/%s", p.VolumeGroup, p.MetadataLV)
-	if !slices.Contains(lvs, metadata) {
-		logger.Info("creating metadata logical volume", "logical-volume", "metadata")
+	if !slices.Contains(lvs, p.GroupAndVolume(p.VolumeGroup, p.MetadataLV)) {
+		logger.Info("creating metadata logical volume", "logical-volume", p.MetadataLV)
 		err = p.CreateMetadataLV(ctx)
 		if err != nil {
 			return err

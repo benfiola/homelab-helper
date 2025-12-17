@@ -111,22 +111,31 @@ func (c *Client) ShowVG(ctx context.Context) (*VGInfo, error) {
 }
 
 type ThinLV struct {
-	LV   string
-	Pool string
-	Size string
+	LogicalVolume string
+	Pool          string
+	Size          string
+	VolumeGroup   string
 }
 
 type ThinLVPool struct {
-	ChunkSize string
-	LV        string
-	Size      string
-	Zero      *bool
+	ChunkSize     string
+	LogicalVolume string
+	Size          string
+	VolumeGroup   string
+	Zero          *bool
 }
 
 func (c *Client) CreateLV(ctx context.Context, lv any) error {
 	command := []string{"lvcreate"}
 
 	if tplv, ok := lv.(ThinLVPool); ok {
+		if tplv.LogicalVolume == "" {
+			return fmt.Errorf("thin pool logical volume unset")
+		}
+		if tplv.VolumeGroup == "" {
+			return fmt.Errorf("thin pool volume group unset")
+		}
+
 		extents := ""
 		if tplv.Size == "" {
 			extents = "100%FREE"
@@ -154,17 +163,27 @@ func (c *Client) CreateLV(ctx context.Context, lv any) error {
 		if zeroStr != "" {
 			command = append(command, "--zero", zeroStr)
 		}
-		command = append(command, tplv.LV)
+		command = append(command, "--name", tplv.LogicalVolume)
+		command = append(command, tplv.VolumeGroup)
 	} else if tlv, ok := lv.(ThinLV); ok {
+		if tlv.LogicalVolume == "" {
+			return fmt.Errorf("thin logical volume unset")
+		}
 		if tlv.Pool == "" {
-			return fmt.Errorf("thin lv pool unset")
+			return fmt.Errorf("thin pool unset")
 		}
 		if tlv.Size == "" {
-			return fmt.Errorf("thin lv size unset")
+			return fmt.Errorf("thin size unset")
+		}
+		if tlv.VolumeGroup == "" {
+			return fmt.Errorf("thin volume group unset")
 		}
 
-		command = append(command, "--type", "thin", "--virtualsize", tlv.Size, "--thinpool", tlv.Pool)
-		command = append(command, tlv.LV)
+		command = append(command, "--type", "thin")
+		command = append(command, "--virtualsize", tlv.Size)
+		command = append(command, "--thinpool", tlv.Pool)
+		command = append(command, "--name", tlv.LogicalVolume)
+		command = append(command, tlv.VolumeGroup)
 	} else {
 		return fmt.Errorf("unimplemented")
 	}
@@ -200,12 +219,13 @@ func (c *Client) ShowLV(ctx context.Context) (*LVInfo, error) {
 	return &lvInfo, nil
 }
 
-func (c *Client) ExtendLV(ctx context.Context, volume string, size string) error {
+func (c *Client) ExtendLV(ctx context.Context, vg string, lv string, size string) error {
 	if size == "" {
 		size = "100%FREE"
 	}
 
-	_, err := process.Output(ctx, []string{"lvextend", "--extents", size, volume})
+	groupAndVolume := fmt.Sprintf("%s/%s", vg, lv)
+	_, err := process.Output(ctx, []string{"lvextend", "--extents", size, groupAndVolume})
 	if err != nil {
 		return err
 	}
