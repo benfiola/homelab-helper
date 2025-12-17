@@ -116,8 +116,11 @@ func ParseStoragePath(storagePath string) (string, string, error) {
 }
 
 func (p *Pusher) ExportSecrets(ctx context.Context) (map[string]any, error) {
+	logger := logging.FromContext(ctx)
+
 	response, err := p.Vault.Secrets.KvV2List(ctx, "", vault.WithMountPath(p.SecretsPath))
 	if err != nil {
+		logger.Error("failed to list secrets from vault", "secrets-path", p.SecretsPath, "error", err)
 		return nil, err
 	}
 	apps := response.Data.Keys
@@ -126,6 +129,7 @@ func (p *Pusher) ExportSecrets(ctx context.Context) (map[string]any, error) {
 	for _, app := range apps {
 		response, err := p.Vault.Secrets.KvV2Read(ctx, app, vault.WithMountPath(p.SecretsPath))
 		if err != nil {
+			logger.Error("failed to read secret", "app", app, "error", err)
 			return nil, err
 		}
 		data[app] = response.Data.Data
@@ -135,24 +139,32 @@ func (p *Pusher) ExportSecrets(ctx context.Context) (map[string]any, error) {
 }
 
 func (p *Pusher) Checksum(ctx context.Context, data map[string]any) (string, error) {
+	logger := logging.FromContext(ctx)
+
 	dataBytes, err := json.Marshal(data)
 	if err != nil {
+		logger.Error("failed to marshal secrets for checksum calculation", "error", err)
 		return "", err
 	}
 
 	hash := sha256.Sum256(dataBytes)
+	checksum := fmt.Sprintf("%x", hash)
 
-	return fmt.Sprintf("%x", hash), nil
+	return checksum, nil
 }
 
 func (p *Pusher) Upload(ctx context.Context, data map[string]any) error {
+	logger := logging.FromContext(ctx)
+
 	bucket, path, err := ParseStoragePath(p.StoragePath)
 	if err != nil {
+		logger.Error("failed to parse storage path", "storage-path", p.StoragePath, "error", err)
 		return err
 	}
 
 	dataBytes, err := yaml.Marshal(data)
 	if err != nil {
+		logger.Error("failed to marshal secrets to YAML", "error", err)
 		return err
 	}
 
@@ -162,6 +174,7 @@ func (p *Pusher) Upload(ctx context.Context, data map[string]any) error {
 
 	_, err = io.Copy(writer, reader)
 	if err != nil {
+		logger.Error("failed to upload to cloud storage", "bucket", bucket, "path", path, "error", err)
 		return err
 	}
 
@@ -173,30 +186,29 @@ func (p *Pusher) AuthVault(ctx context.Context) error {
 
 	token := p.Token
 	if token == "" {
-
 		tokenPath := "/var/run/secrets/kubernetes.io/serviceaccount/token"
-		logger.Debug("reading service account token", "path", tokenPath)
 		jwtBytes, err := os.ReadFile(tokenPath)
 		if err != nil {
+			logger.Error("failed to read service account token", "path", tokenPath, "error", err)
 			return err
 		}
 		jwt := string(jwtBytes)
 
-		logger.Debug("authenticating as kubernetes service account", "role", p.Role)
 		response, err := p.Vault.Auth.KubernetesLogin(ctx, schema.KubernetesLoginRequest{
 			Jwt:  jwt,
 			Role: p.Role,
 		})
 		if err != nil {
+			logger.Error("failed to authenticate with vault using kubernetes", "role", p.Role, "error", err)
 			return err
 		}
 
 		token = response.Auth.ClientToken
 	}
 
-	logger.Debug("setting client token", "token", token)
 	err := p.Vault.SetToken(token)
 	if err != nil {
+		logger.Error("failed to set vault client token", "error", err)
 		return err
 	}
 
@@ -205,44 +217,53 @@ func (p *Pusher) AuthVault(ctx context.Context) error {
 
 func (p *Pusher) Push(ctx context.Context) error {
 	logger := logging.FromContext(ctx)
-	logger.Info("pushing vault secrets to cloud storage")
 
-	logger.Info("logging into vault", "address", p.Address, "role", p.Role)
+	logger.Debug("authenticating with vault")
 	err := p.AuthVault(ctx)
 	if err != nil {
+		logger.Error("vault authentication failed", "error", err)
 		return err
 	}
 	defer p.Vault.ClearToken()
 
-	logger.Info("exporting secrets", "address", p.Address)
+	logger.Debug("exporting secrets")
 	secrets, err := p.ExportSecrets(ctx)
 	if err != nil {
+		logger.Error("failed to export secrets", "error", err)
 		return err
 	}
 
-	logger.Info("calculating checksum")
+	logger.Debug("calculating checksum")
 	checksum, err := p.Checksum(ctx, secrets)
 	if err != nil {
+		logger.Error("failed to calculate checksum", "error", err)
 		return err
 	}
+
 	if checksum == p.LastChecksum {
-		logger.Info("secrets are unchanged")
+		logger.Info("secrets unchanged, skipping upload")
 		return nil
 	}
+	logger.Debug("secrets changed, uploading", "previous-checksum", p.LastChecksum, "current-checksum", checksum)
 	p.LastChecksum = checksum
 
-	logger.Info("uploading secrets", "storage-path", p.StoragePath)
 	err = p.Upload(ctx, secrets)
 	if err != nil {
+		logger.Error("failed to upload secrets", "error", err)
 		return err
 	}
 
+	logger.Info("secrets successfully pushed", "checksum", checksum)
 	return nil
 }
 
 func (p *Pusher) Run(ctx context.Context) error {
+	logger := logging.FromContext(ctx)
+	logger.Info("starting vault push", "vault", p.Address)
+
 	err := p.Push(ctx)
 	if err != nil {
+		logger.Error("initial push failed", "error", err)
 		return err
 	}
 
@@ -250,8 +271,7 @@ func (p *Pusher) Run(ctx context.Context) error {
 		return nil
 	}
 
-	logger := logging.FromContext(ctx)
-	logger.Info("running forever", "interval", p.Interval)
+	logger.Info("entering continuous push loop", "interval", p.Interval)
 
 	ticker := time.NewTicker(p.Interval)
 	defer ticker.Stop()
@@ -260,17 +280,23 @@ func (p *Pusher) Run(ctx context.Context) error {
 	signal.Notify(signalChannel, syscall.SIGINT, syscall.SIGTERM)
 
 	running := true
+	pushCount := 0
 	for running {
 		select {
 		case <-ticker.C:
+			pushCount++
+			logger.Debug("executing scheduled push", "push-number", pushCount)
 			err := p.Push(ctx)
 			if err != nil {
+				logger.Error("push failed", "push-number", pushCount, "error", err)
 				return err
 			}
-		case <-signalChannel:
+		case sig := <-signalChannel:
+			logger.Info("shutdown signal received", "signal", sig)
 			running = false
 		}
 	}
 
+	logger.Info("vault push shutdown complete")
 	return nil
 }

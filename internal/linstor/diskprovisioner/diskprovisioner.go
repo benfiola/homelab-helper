@@ -66,7 +66,6 @@ func New(opts *Opts) (*DiskProvisioner, error) {
 func (p *DiskProvisioner) ResolvePartitionLabel(ctx context.Context) (string, error) {
 	logger := logging.FromContext(ctx)
 	symlink := fmt.Sprintf("/dev/disk/by-partlabel/%s", p.PartitionLabel)
-	logger.Debug("resolving partition label symlink", "symlink", symlink)
 
 	relPath, err := os.Readlink(symlink)
 	if err != nil {
@@ -80,7 +79,6 @@ func (p *DiskProvisioner) ResolvePartitionLabel(ctx context.Context) (string, er
 		return "", fmt.Errorf("could not resolve device symlink '%s'", symlink)
 	}
 
-	logger.Info("resolved partition label to device", "partition-label", p.PartitionLabel, "device", absPath)
 	return absPath, nil
 }
 
@@ -90,11 +88,9 @@ func (p *DiskProvisioner) GetSatelliteID(ctx context.Context) (string, error) {
 
 	_, err := os.Lstat(device)
 	if err != nil {
-		logger.Debug("metadata device does not exist, satellite id unavailable", "device", device)
 		return "", nil
 	}
 
-	logger.Debug("mounting metadata device to read satellite id", "device", device)
 	mount, err := os.MkdirTemp("", "")
 	if err != nil {
 		logger.Error("failed to create temporary mount directory", "error", err)
@@ -114,13 +110,11 @@ func (p *DiskProvisioner) GetSatelliteID(ctx context.Context) (string, error) {
 	file := fmt.Sprintf("%s/satellite-id", mount)
 	dataBytes, err := os.ReadFile(file)
 	if err != nil {
-		logger.Debug("failed to read satellite-id file", "file", file, "error", err)
 		return "", nil
 	}
 
 	data := string(dataBytes)
 	data = strings.TrimSpace(data)
-	logger.Info("retrieved satellite id from metadata", "satellite-id", data)
 	return data, nil
 }
 
@@ -130,7 +124,6 @@ func (p *DiskProvisioner) GroupAndVolume(vg string, lv string) string {
 
 func (p *DiskProvisioner) ListPVs(ctx context.Context) ([]string, error) {
 	logger := logging.FromContext(ctx)
-	logger.Debug("querying physical volumes")
 
 	data, err := p.Client.ShowPV(ctx)
 	if err != nil {
@@ -150,13 +143,11 @@ func (p *DiskProvisioner) ListPVs(ctx context.Context) ([]string, error) {
 		pvs = append(pvs, pv)
 	}
 
-	logger.Debug("found physical volumes", "count", len(pvs), "pvs", pvs)
 	return pvs, nil
 }
 
 func (p *DiskProvisioner) ListVGs(ctx context.Context) ([]string, error) {
 	logger := logging.FromContext(ctx)
-	logger.Debug("querying volume groups")
 
 	data, err := p.Client.ShowVG(ctx)
 	if err != nil {
@@ -176,13 +167,11 @@ func (p *DiskProvisioner) ListVGs(ctx context.Context) ([]string, error) {
 		vgs = append(vgs, vg)
 	}
 
-	logger.Debug("found volume groups", "count", len(vgs), "vgs", vgs)
 	return vgs, nil
 }
 
 func (p *DiskProvisioner) ListLVs(ctx context.Context) ([]string, error) {
 	logger := logging.FromContext(ctx)
-	logger.Debug("querying logical volumes")
 
 	data, err := p.Client.ShowLV(ctx)
 	if err != nil {
@@ -202,13 +191,11 @@ func (p *DiskProvisioner) ListLVs(ctx context.Context) ([]string, error) {
 		lvs = append(lvs, lv)
 	}
 
-	logger.Debug("found logical volumes", "count", len(lvs), "lvs", lvs)
 	return lvs, nil
 }
 
 func (p *DiskProvisioner) CreateMetadataLV(ctx context.Context) error {
 	logger := logging.FromContext(ctx)
-	logger.Info("creating metadata logical volume", "lv-name", p.MetadataLV, "size", "100M", "pool", p.Pool)
 
 	err := p.Client.CreateLV(ctx, lvm2.ThinLV{
 		LogicalVolume: p.MetadataLV,
@@ -222,7 +209,6 @@ func (p *DiskProvisioner) CreateMetadataLV(ctx context.Context) error {
 	}
 
 	device := fmt.Sprintf("/dev/%s/%s", p.VolumeGroup, p.MetadataLV)
-	logger.Debug("formatting metadata device with ext4", "device", device)
 
 	_, err = process.Output(ctx, []string{"mkfs.ext4", device})
 	if err != nil {
@@ -237,7 +223,6 @@ func (p *DiskProvisioner) CreateMetadataLV(ctx context.Context) error {
 	}
 	defer os.RemoveAll(mount)
 
-	logger.Debug("mounting metadata device", "device", device, "mount-point", mount)
 	_, err = process.Output(ctx, []string{"mount", device, mount})
 	if err != nil {
 		logger.Error("failed to mount metadata device", "device", device, "error", err)
@@ -248,7 +233,6 @@ func (p *DiskProvisioner) CreateMetadataLV(ctx context.Context) error {
 	}()
 
 	file := fmt.Sprintf("%s/satellite-id", mount)
-	logger.Debug("writing satellite id to metadata file", "file", file, "satellite-id", p.SatelliteID)
 
 	err = os.WriteFile(file, []byte(p.SatelliteID), 0644)
 	if err != nil {
@@ -256,105 +240,116 @@ func (p *DiskProvisioner) CreateMetadataLV(ctx context.Context) error {
 		return err
 	}
 
-	logger.Info("successfully created and initialized metadata logical volume")
 	return nil
 }
 
 func (p *DiskProvisioner) Provision(ctx context.Context) error {
 	logger := logging.FromContext(ctx)
-	logger.Info("provisioning disks")
 
-	logger.Info("resolving symlink", "partition-label", p.PartitionLabel)
+	logger.Debug("resolving partition label", "partition-label", p.PartitionLabel)
 	pv, err := p.ResolvePartitionLabel(ctx)
 	if err != nil {
+		logger.Error("failed to resolve partition label", "error", err)
 		return err
 	}
 
-	logger.Info("listing all pvs")
+	logger.Debug("listing physical volumes")
 	pvs, err := p.ListPVs(ctx)
 	if err != nil {
+		logger.Error("failed to list physical volumes", "error", err)
 		return err
 	}
 
-	logger.Info("listing all vgs")
+	logger.Debug("listing volume groups")
 	vgs, err := p.ListVGs(ctx)
 	if err != nil {
+		logger.Error("failed to list volume groups", "error", err)
 		return err
 	}
 
-	logger.Info("getting known satellite id")
+	logger.Debug("retrieving satellite id")
 	satelliteID, err := p.GetSatelliteID(ctx)
 	if err != nil {
+		logger.Error("failed to retrieve satellite id", "error", err)
 		return err
 	}
 
 	if p.SatelliteID != satelliteID {
-		logger.Info("satellite id differs", "known", satelliteID, "expected", p.SatelliteID)
+		logger.Info("satellite id mismatch, resetting lvm configuration", "existing", satelliteID, "expected", p.SatelliteID)
 
 		for _, vg := range vgs {
-			logger.Info("removing all logical volumes for volume group", "volume-group", vg)
+			logger.Debug("removing logical volumes", "volume-group", vg)
 			err := p.Client.RemoveAllLVs(ctx, vg)
 			if err != nil {
+				logger.Error("failed to remove logical volumes", "volume-group", vg, "error", err)
 				return err
 			}
 
-			logger.Info("removing volume group", "volume-group", vg)
+			logger.Debug("removing volume group", "volume-group", vg)
 			err = p.Client.RemoveVG(ctx, vg)
 			if err != nil {
+				logger.Error("failed to remove volume group", "volume-group", vg, "error", err)
 				return err
 			}
 		}
 
 		for _, pv := range pvs {
-			logger.Info("removing pv", "physical-volume", pv)
+			logger.Debug("removing physical volume", "physical-volume", pv)
 			err = p.Client.RemovePV(ctx, pv)
 			if err != nil {
+				logger.Error("failed to remove physical volume", "physical-volume", pv, "error", err)
 				return err
 			}
 		}
 
-		logger.Info("(re-)listing all pvs")
+		logger.Debug("re-listing physical volumes")
 		pvs, err = p.ListPVs(ctx)
 		if err != nil {
+			logger.Error("failed to re-list physical volumes", "error", err)
 			return err
 		}
 
-		logger.Info("(re-)listing all vgs")
+		logger.Debug("re-listing volume groups")
 		vgs, err = p.ListVGs(ctx)
 		if err != nil {
+			logger.Error("failed to re-list volume groups", "error", err)
 			return err
 		}
 	}
 
 	if !slices.Contains(pvs, pv) {
-		logger.Info("creating physical volume", "physical-volume", pv)
+		logger.Debug("creating physical volume", "physical-volume", pv)
 		err = p.Client.CreatePV(ctx, pv)
 		if err != nil {
+			logger.Error("failed to create physical volume", "physical-volume", pv, "error", err)
 			return err
 		}
 	}
 
-	logger.Info("resizing physical volume", "physical-volume", pv)
+	logger.Debug("resizing physical volume", "physical-volume", pv)
 	err = p.Client.ResizePV(ctx, pv)
 	if err != nil {
+		logger.Error("failed to resize physical volume", "physical-volume", pv, "error", err)
 		return err
 	}
 
 	if !slices.Contains(vgs, p.VolumeGroup) {
-		logger.Info("creating volume group", "physical-volume", pv, "volume-group", p.VolumeGroup)
+		logger.Debug("creating volume group", "physical-volume", pv, "volume-group", p.VolumeGroup)
 		err = p.Client.CreateVG(ctx, p.VolumeGroup, pv)
 		if err != nil {
+			logger.Error("failed to create volume group", "volume-group", p.VolumeGroup, "error", err)
 			return err
 		}
 	}
 
 	lvs, err := p.ListLVs(ctx)
 	if err != nil {
+		logger.Error("failed to list logical volumes", "error", err)
 		return err
 	}
 
 	if !slices.Contains(lvs, p.GroupAndVolume(p.VolumeGroup, p.Pool)) {
-		logger.Info("creating thin pool", "logical-volume", p.Pool)
+		logger.Debug("creating thin pool", "pool", p.Pool, "volume-group", p.VolumeGroup)
 		err = p.Client.CreateLV(ctx, lvm2.ThinLVPool{
 			ChunkSize:     "512K",
 			LogicalVolume: p.Pool,
@@ -362,27 +357,30 @@ func (p *DiskProvisioner) Provision(ctx context.Context) error {
 			Zero:          ptr.Get(false),
 		})
 		if err != nil {
+			logger.Error("failed to create thin pool", "pool", p.Pool, "error", err)
 			return err
 		}
 	}
 
-	logger.Info("extending thin pool", "logical-volume", p.Pool)
+	logger.Debug("extending thin pool", "pool", p.Pool, "volume-group", p.VolumeGroup)
 	p.Client.ExtendLV(ctx, p.VolumeGroup, p.Pool, "")
 
 	if !slices.Contains(lvs, p.GroupAndVolume(p.VolumeGroup, p.MetadataLV)) {
-		logger.Info("creating metadata logical volume", "logical-volume", p.MetadataLV)
+		logger.Debug("creating metadata logical volume", "lv", p.MetadataLV)
 		err = p.CreateMetadataLV(ctx)
 		if err != nil {
+			logger.Error("failed to create metadata logical volume", "error", err)
 			return err
 		}
 	}
 
+	logger.Info("disk provisioning completed successfully")
 	return nil
 }
 
 func (p *DiskProvisioner) Run(ctx context.Context) error {
 	logger := logging.FromContext(ctx)
-	logger.Info("starting disk provisioning process")
+	logger.Info("starting disk provisioning")
 
 	err := p.Provision(ctx)
 	if err != nil {
@@ -390,6 +388,5 @@ func (p *DiskProvisioner) Run(ctx context.Context) error {
 		return err
 	}
 
-	logger.Info("disk provisioning completed successfully")
 	return nil
 }

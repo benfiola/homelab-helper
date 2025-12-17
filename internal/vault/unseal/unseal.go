@@ -56,82 +56,98 @@ func New(opts *Opts) (*Unsealer, error) {
 	return &unsealer, nil
 }
 
-func (u *Unsealer) WaitForPath(ctx context.Context) {
+func (u *Unsealer) WaitForPath(ctx context.Context) error {
 	logger := logging.FromContext(ctx)
 
 	for {
 		_, err := os.Lstat(u.UnsealKeyPath)
-		if err != nil {
-			time.Sleep(1 * time.Second)
-			continue
+		if err == nil {
+			return nil
 		}
-		logger.Debug("path lstat failed", "error", err, "path", u.UnsealKeyPath)
-		break
+		logger.Debug("waiting for unseal key file", "path", u.UnsealKeyPath)
+		time.Sleep(1 * time.Second)
 	}
 }
 
-func (u *Unsealer) WaitForVault(ctx context.Context) {
+func (u *Unsealer) WaitForVault(ctx context.Context) error {
 	logger := logging.FromContext(ctx)
 
 	for {
 		_, err := u.Vault.System.SealStatus(ctx)
 		if err == nil {
-			break
+			return nil
 		}
-		logger.Debug("vault seal status request failed", "error", err)
+		logger.Debug("vault not ready, retrying", "address", u.Address)
 		time.Sleep(1 * time.Second)
 	}
 }
 
 func (u *Unsealer) Unseal(ctx context.Context) error {
 	logger := logging.FromContext(ctx)
-	logger.Info("unsealing vault")
 
-	logger.Info("waiting for unseal key", "unseal-key-path", u.UnsealKeyPath)
-	u.WaitForPath(ctx)
+	logger.Debug("waiting for unseal key file")
+	err := u.WaitForPath(ctx)
+	if err != nil {
+		logger.Error("failed while waiting for unseal key file", "error", err)
+		return err
+	}
 
-	logger.Info("waiting for vault", "address", u.Address)
-	u.WaitForVault(ctx)
+	logger.Debug("waiting for vault to be reachable")
+	err = u.WaitForVault(ctx)
+	if err != nil {
+		logger.Error("failed while waiting for vault", "error", err)
+		return err
+	}
 
+	logger.Debug("checking vault seal status")
 	response, err := u.Vault.System.SealStatus(ctx)
 	if err != nil {
+		logger.Error("failed to check vault seal status", "error", err)
 		return err
 	}
 	if !response.Data.Sealed {
-		logger.Info("vault unsealed")
+		logger.Info("vault already unsealed")
 		return nil
 	}
 
-	logger.Info("reading unseal key", "unseal-key-path", u.UnsealKeyPath)
+	logger.Debug("reading unseal key")
 	unsealKeyBytes, err := os.ReadFile(u.UnsealKeyPath)
 	if err != nil {
+		logger.Error("failed to read unseal key file", "path", u.UnsealKeyPath, "error", err)
 		return err
 	}
 	unsealKey := string(unsealKeyBytes)
 
-	logger.Info("unsealing vault", "address", u.Address)
+	logger.Debug("sending unseal request to vault")
 	_, err = u.Vault.System.Unseal(ctx, schema.UnsealRequest{Key: unsealKey})
 	if err != nil {
+		logger.Error("failed to unseal vault", "error", err)
 		return err
 	}
 
-	logger.Info("vault unsealed", "address", u.Address)
+	logger.Info("vault unsealed successfully")
 	return nil
 }
 
 func (u *Unsealer) Run(ctx context.Context) error {
+	logger := logging.FromContext(ctx)
+	logger.Info("starting vault unseal process", "vault", u.Address)
+
 	err := u.Unseal(ctx)
 	if err != nil {
+		logger.Error("unseal process failed", "error", err)
 		return err
 	}
 
-	if u.RunForever {
-		logger := logging.FromContext(ctx)
-		logger.Info("sleeping until signal")
-		signalChannel := make(chan os.Signal, 1)
-		signal.Notify(signalChannel, syscall.SIGTERM, syscall.SIGINT)
-		<-signalChannel
+	if !u.RunForever {
+		return nil
 	}
+
+	logger.Info("unseal successful, waiting for shutdown signal")
+	signalChannel := make(chan os.Signal, 1)
+	signal.Notify(signalChannel, syscall.SIGTERM, syscall.SIGINT)
+	sig := <-signalChannel
+	logger.Info("received signal, shutting down", "signal", sig)
 
 	return nil
 }
