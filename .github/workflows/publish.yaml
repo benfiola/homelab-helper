@@ -74,6 +74,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: gateway-controller-${{ steps.version.outputs.version }}.tgz
+          tag: "v${{ steps.version.outputs.version }}"
       - name: run chart-releaser
         uses: helm/chart-releaser-action@v1.6.0
         env:
