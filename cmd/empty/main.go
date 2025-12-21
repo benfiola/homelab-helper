@@ -1,3 +1,0 @@
-package empty
-
-func main() {}

@@ -11,7 +11,7 @@ builds:
       - amd64
     ldflags:
       - "-X {{ .ModulePath }}/internal/info.Version={{ .Version }}"
-    main: ./cmd/empty
+    main: ./cmd/homelab-helper
 
 dockers_v2:
   - dockerfile: .goreleaser.Dockerfile
