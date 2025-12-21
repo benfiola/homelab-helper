@@ -62,3 +62,13 @@ jobs:
           args: release --clean
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: generate content
+        run: |
+          make generate
+      - name: prepare helm
+        run: |
+          go run ./scripts/set-helm-version ./charts/gateway-controller "${{ steps.version.outputs.version }}"
+      - name: run chart-releaser
+        uses: helm/chart-releaser-action@v1.6.0
+        env:
+          CR_TOKEN: "${{ secrets.GITHUB_TOKEN }}"

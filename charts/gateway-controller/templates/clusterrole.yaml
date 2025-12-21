@@ -7,4 +7,3 @@ metadata:
 rules:
 {{- $rbac := .Files.Get "generated/rbac.yaml" | fromYaml -}}
 {{- get $rbac "rules" | toYaml | nindent 2 -}}
-{{- end }}
