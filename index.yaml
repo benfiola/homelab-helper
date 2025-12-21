@@ -3,6 +3,17 @@ entries:
   gateway-controller:
   - apiVersion: v2
     appVersion: 0.0.0
+    created: "2025-12-21T23:28:23.410357313Z"
+    description: A helm chart that deploys the gateway controller - used to dynamically
+      update Gateway resources with hostnames from attached routes.
+    digest: 4daced02f1087c710ebb3d4eb771238f8423f17f5fa5e8851dbeb18e6dbab6b0
+    name: gateway-controller
+    type: application
+    urls:
+    - https://github.com/benfiola/homelab-helper/releases/download/v0.6.37/gateway-controller-v0.6.37.tgz
+    version: v0.6.37
+  - apiVersion: v2
+    appVersion: 0.0.0
     created: "2025-12-21T08:13:48.978299747Z"
     description: A helm chart that deploys the gateway controller - used to dynamically
       update Gateway resources with hostnames from attached routes.
@@ -12,4 +23,4 @@ entries:
     urls:
     - https://github.com/benfiola/homelab-helper/releases/download/gateway-controller-v0.6.31/gateway-controller-v0.6.31.tgz
     version: v0.6.31
-generated: "2025-12-21T08:13:48.97830637Z"
+generated: "2025-12-21T23:28:23.410368293Z"
