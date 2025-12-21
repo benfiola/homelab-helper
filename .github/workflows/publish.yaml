@@ -36,6 +36,10 @@ jobs:
       - name: install tools
         run: |
           sudo BIN=/usr/local/bin make install-tools
+      - name: generate content
+        run: |
+          make generate
+          git diff --exit-code
       - name: determine version
         id: version
         run: |
@@ -62,9 +66,6 @@ jobs:
           args: release --clean
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      - name: generate content
-        run: |
-          make generate
       - name: prepare helm
         run: |
           go run ./scripts/set-helm-version ./charts/gateway-controller "${{ steps.version.outputs.version }}"
