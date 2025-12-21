@@ -66,11 +66,17 @@ jobs:
           args: release --clean
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      - name: prepare helm
+      - name: package helm chart
         run: |
           go run ./scripts/set-helm-version ./charts/gateway-controller "${{ steps.version.outputs.version }}"
+          helm package ./charts/gateway-controller
+      - name: update release with helm chart
+        uses: softprops/action-gh-release@v2
+        with:
+          files: gateway-controller-${{ steps.version.outputs.version }}.tgz
       - name: run chart-releaser
         uses: helm/chart-releaser-action@v1.6.0
         env:
           CR_RELEASE_NAME_TEMPLATE: "{{ .Version }}"
+          CR_SKIP_EXISTING: true
           CR_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
