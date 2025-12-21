@@ -1,6 +1,6 @@
 FROM debian:bookworm-slim AS homelab_helper_builder
 ARG TARGETPLATFORM
-COPY $TARGETPLATFORM/empty /usr/bin/
+COPY $TARGETPLATFORM/homelab-helper /usr/bin/
 
 
 FROM ghcr.io/benfiola/homelab-lvm:0.1.1 AS lvm2_builder
@@ -19,4 +19,4 @@ tar xvzf /tmp/archive.tar.gz
 ln -fs /sbin/lvm /usr/sbin/lvm.static
 EOF
 
-COPY --from=homelab_helper_builder /usr/bin/empty /usr/bin/empty
+COPY --from=homelab_helper_builder /usr/bin/homelab-helper /usr/bin/homelab-helper
