@@ -1,4 +1,4 @@
-package unseal
+package vaultunseal
 
 import (
 	"context"

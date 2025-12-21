@@ -5,12 +5,13 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/benfiola/homelab-helper/internal/gatewaycontroller"
 	"github.com/benfiola/homelab-helper/internal/info"
 	"github.com/benfiola/homelab-helper/internal/linstor/diskprovisioner"
 	"github.com/benfiola/homelab-helper/internal/logging"
 	"github.com/benfiola/homelab-helper/internal/ptr"
-	"github.com/benfiola/homelab-helper/internal/vault/push"
-	"github.com/benfiola/homelab-helper/internal/vault/unseal"
+	"github.com/benfiola/homelab-helper/internal/vaultpush"
+	"github.com/benfiola/homelab-helper/internal/vaultunseal"
 	"github.com/urfave/cli/v3"
 )
 
@@ -32,6 +33,34 @@ func main() {
 			return sctx, nil
 		},
 		Commands: []*cli.Command{
+			{
+				Name: "gateway-run-controller",
+				Flags: []cli.Flag{
+					&cli.BoolFlag{
+						Name:    "leader-election",
+						Sources: cli.EnvVars("LEADER_ELECTION"),
+					},
+					&cli.StringFlag{
+						Name:    "metrics-addr",
+						Sources: cli.EnvVars("METRICS_ADDR"),
+						Value:   ":8080",
+					},
+				},
+				Action: func(ctx context.Context, c *cli.Command) error {
+					leaderElection := c.Bool("leader-election")
+					metricsAddress := c.String("metrics-address")
+
+					controller, err := gatewaycontroller.New(&gatewaycontroller.Opts{
+						LeaderElection: leaderElection,
+						MetricsAddress: metricsAddress,
+					})
+					if err != nil {
+						return err
+					}
+
+					return controller.Run(ctx)
+				},
+			},
 			{
 				Name: "linstor-provision-disk",
 				Flags: []cli.Flag{
@@ -98,7 +127,7 @@ func main() {
 					runForever := c.Bool("run-forever")
 					unsealKeyPath := c.String("unseal-key-path")
 
-					unsealer, err := unseal.New(&unseal.Opts{
+					unsealer, err := vaultunseal.New(&vaultunseal.Opts{
 						Address:       address,
 						RunForever:    ptr.Get(runForever),
 						UnsealKeyPath: unsealKeyPath,
@@ -155,7 +184,7 @@ func main() {
 					storageCredentialsPath := c.String("storage-credentials-path")
 					token := c.String("token")
 
-					pusher, err := push.New(&push.Opts{
+					pusher, err := vaultpush.New(&vaultpush.Opts{
 						Address:                address,
 						Role:                   role,
 						RunForever:             ptr.Get(runForever),

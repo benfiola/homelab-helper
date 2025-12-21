@@ -1,3 +1,4 @@
+CONTROLLERGEN_VERSION := 0.20.0
 GORELEASER_VERSION := 2.12.7
 SVU_VERSION := 3.3.0
 
@@ -28,6 +29,10 @@ install-tools:
 $(eval $(call tool-from-apt,bsdtar,libarchive-tools))
 $(eval $(call tool-from-apt,curl,curl))
 
+controllergen_arch = $(arch)
+controllergen_url := https://github.com/kubernetes-sigs/controller-tools/releases/download/v$(CONTROLLERGEN_VERSION)/controller-gen-linux-$(controllergen_arch)
+$(eval $(call tool-from-url,controller-gen,$(controllergen_url)))
+
 goreleaser_arch := $(arch)
 ifeq ($(goreleaser_arch),amd64)
 	goreleaser_arch := x86_64
@@ -37,3 +42,17 @@ $(eval $(call tool-from-tar-gz,goreleaser,$(goreleaser_url),0))
 
 svu_url := https://github.com/caarlos0/svu/releases/download/v$(SVU_VERSION)/svu_$(SVU_VERSION)_linux_$(arch).tar.gz
 $(eval $(call tool-from-tar-gz,svu,$(svu_url),0))
+
+.PHONY: generate
+generate: generate__gateway-controller
+
+.PHONY: generate__gateway-controller
+generate__gateway-controller:
+	# clean up generated dirs
+	rm -rf ./charts/gateway-controller/generated && mkdir -p ./charts/gateway-controller/generated
+	# create deepcopy implementations
+	controller-gen object paths="./internal/gatewaycontroller/api/..."
+	# create crd manifests
+	controller-gen crd paths="./internal/gatewaycontroller/..." output:stdout > charts/gateway-controller/generated/crds.yaml
+	# create rbac manifests
+	controller-gen rbac:roleName=__roleName__ paths="./internal/gatewaycontroller/..." output:stdout > ./charts/gateway-controller/generated/rbac.yaml

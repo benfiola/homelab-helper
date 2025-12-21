@@ -1,0 +1,32 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "gateway-controller.fullname" . }}
+  labels:
+  {{- include "gateway-controller.labels" . | nindent 4 }}
+spec:
+  selector:
+    matchLabels:
+      app: gateway-controller
+    {{- include "gateway-controller.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        app: gateway-controller
+      {{- include "gateway-controller.selectorLabels" . | nindent 8 }}
+    spec:
+      containers:
+      - args: {{- toYaml .Values.gatewayController.gatewayController.args | nindent 8 }}
+        env:
+        - name: KUBERNETES_CLUSTER_DOMAIN
+          value: {{ quote .Values.kubernetesClusterDomain }}
+        image: {{ .Values.gatewayController.gatewayController.image.repository }}:{{ .Values.gatewayController.gatewayController.image.tag
+          | default .Chart.AppVersion }}
+        name: gateway-controller
+        resources: {}
+      imagePullSecrets: {{ .Values.imagePullSecrets | default list | toJson }}
+      nodeSelector: {{- toYaml .Values.gatewayController.nodeSelector | nindent 8 }}
+      serviceAccountName: {{ include "gateway-controller.serviceAccountName" . }}
+      tolerations: {{- toYaml .Values.gatewayController.tolerations | nindent 8 }}
+      topologySpreadConstraints: {{- toYaml .Values.gatewayController.topologySpreadConstraints
+        | nindent 8 }}
