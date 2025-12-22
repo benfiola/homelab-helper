@@ -1,6 +1,7 @@
 CONTROLLERGEN_VERSION := 0.20.0
 GORELEASER_VERSION := 2.12.7
 HELM_VERSION := 4.0.4
+HELMIFY_VERSION := 0.4.19
 SVU_VERSION := 3.3.0
 
 include Makefile.include.mk
@@ -44,6 +45,13 @@ $(eval $(call tool-from-tar-gz,goreleaser,$(goreleaser_url),0))
 helm_arch := $(arch)
 helm_url := https://get.helm.sh/helm-v$(HELM_VERSION)-linux-$(helm_arch).tar.gz
 $(eval $(call tool-from-tar-gz,helm,$(helm_url),1))
+
+helmify_arch := $(arch)
+ifeq ($(helmify_arch),amd64)
+	helmify_arch := x86_64
+endif
+helmify_url := https://github.com/arttor/helmify/releases/download/v$(HELMIFY_VERSION)/helmify_Linux_$(helmify_arch).tar.gz
+$(eval $(call tool-from-tar-gz,helmify,$(helmify_url),0))
 
 svu_url := https://github.com/caarlos0/svu/releases/download/v$(SVU_VERSION)/svu_$(SVU_VERSION)_linux_$(arch).tar.gz
 $(eval $(call tool-from-tar-gz,svu,$(svu_url),0))
