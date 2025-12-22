@@ -71,7 +71,7 @@ jobs:
           go run ./scripts/set-helm-version ./charts/gateway-controller "${{ steps.version.outputs.version }}"
           helm package ./charts/gateway-controller
       - name: update release with helm chart
-        uses: softprops/action-gh-release@v2.4.2
+        uses: softprops/action-gh-release@v2
         with:
           fail_on_unmatched_files: true
           files: |
