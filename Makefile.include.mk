@@ -34,11 +34,11 @@ install-tools: install-tools__$(1)
 install-tools__$(1): $$(BIN)/$(1)
 $$(BIN)/$(1): $$(BIN)/curl | $$(BIN)
 	# clean temp paths
-	rm -rf $$(BIN)/binary
+	rm -rf $$(BIN)/.binary
 	# download $(1)
-	curl -o $$(BIN)/binary -fsSL $(2)
+	curl -o $$(BIN)/.binary -fsSL $(2)
 	# make $(1) executable
-	chmod +x $$(BIN)/binary
+	chmod +x $$(BIN)/.binary
 	# move $(1)
-	mv $$(BIN)/binary $$(BIN)/$(1)
+	mv $$(BIN)/.binary $$(BIN)/$(1)
 endef
