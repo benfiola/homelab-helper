@@ -16,11 +16,11 @@ spec:
       {{- include "gateway-controller.selectorLabels" . | nindent 8 }}
     spec:
       containers:
-      - args: {{- toYaml .Values.gatewayController.gatewayController.args | nindent 8 }}
+      - args: {{- toYaml .Values.gatewayController.args | nindent 8 }}
         env:
         - name: KUBERNETES_CLUSTER_DOMAIN
           value: {{ quote .Values.kubernetesClusterDomain }}
-        image: {{ .Values.gatewayController.gatewayController.image.repository }}:{{ .Values.gatewayController.gatewayController.image.tag
+        image: {{ .Values.gatewayController.image.repository }}:{{ .Values.gatewayController.image.tag
           | default .Chart.AppVersion }}
         name: gateway-controller
         resources: {}

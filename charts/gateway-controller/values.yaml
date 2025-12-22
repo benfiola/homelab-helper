@@ -1,13 +1,12 @@
 gatewayController:
-  gatewayController:
-    args:
+  args:
     - homelab-helper
     - gateway-run-controller
-    image:
-      repository: ghcr.io/benfiola/homelab-helper
-      tag: 0.6.21
+  image:
+    repository: ghcr.io/benfiola/homelab-helper
   nodeSelector: {}
   tolerations: []
   topologySpreadConstraints: []
+
 imagePullSecrets: []
 kubernetesClusterDomain: cluster.local
