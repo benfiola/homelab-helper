@@ -99,11 +99,6 @@ func (in *WrappedGatewaySpec) DeepCopyInto(out *WrappedGatewaySpec) {
 			(*in)[i].DeepCopyInto(&(*out)[i])
 		}
 	}
-	if in.AllowedListeners != nil {
-		in, out := &in.AllowedListeners, &out.AllowedListeners
-		*out = new(v1.AllowedListeners)
-		(*in).DeepCopyInto(*out)
-	}
 	if in.BackendTLS != nil {
 		in, out := &in.BackendTLS, &out.BackendTLS
 		*out = new(v1.GatewayBackendTLS)

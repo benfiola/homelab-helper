@@ -14,8 +14,10 @@ type ListenerTemplate struct {
 
 // +kubebuilder:object:generate=true
 type WrappedGatewaySpec struct {
+	// +kubebuilder:validation:MaxItems=16
+	// +kubebuilder:validation:XValidation:message="IPAddress values must be unique",rule="self.all(a1, a1.type == 'IPAddress' ? self.exists_one(a2, a2.type == a1.type && a2.value == a1.value) : true )"
+	// +kubebuilder:validation:XValidation:message="Hostname values must be unique",rule="self.all(a1, a1.type == 'Hostname' ? self.exists_one(a2, a2.type == a1.type && a2.value == a1.value) : true )"
 	Addresses        []gatewayapis.GatewaySpecAddress   `json:"addresses,omitempty"`
-	AllowedListeners *gatewayapis.AllowedListeners      `json:"allowedListeners,omitempty"`
 	BackendTLS       *gatewayapis.GatewayBackendTLS     `json:"backendTLS,omitempty"`
 	GatewayClassName gatewayapis.ObjectName             `json:"gatewayClassName"`
 	Infrastructure   *gatewayapis.GatewayInfrastructure `json:"infrastructure,omitempty"`

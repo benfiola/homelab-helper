@@ -185,20 +185,14 @@ func (r *WrappedGatewayReconciler) GetNamespace(o client.Object) string {
 	return namespace
 }
 
-type ListenerRoute struct {
-	Namespace string
-	Name      string
-	Kind      string
-}
-
-type ListenerData struct {
+type RouteData struct {
 	Hostname  gatewayapis.Hostname
 	Kind      gatewayapis.Kind
 	Group     gatewayapis.Group
 	Namespace gatewayapis.Namespace
 }
 
-func (d ListenerData) String() string {
+func (d RouteData) String() string {
 	vals := []string{
 		string(d.Hostname),
 		string(d.Namespace),
@@ -209,10 +203,10 @@ func (d ListenerData) String() string {
 	return val
 }
 
-func (r *WrappedGatewayReconciler) GetRouteData(ctx context.Context, gateway *api.WrappedGateway) ([]ListenerData, error) {
+func (r *WrappedGatewayReconciler) GetRouteData(ctx context.Context, gateway *api.WrappedGateway) ([]RouteData, error) {
 	logger := logging.FromContext(ctx)
 
-	dataMap := map[string]ListenerData{}
+	dataMap := map[string]RouteData{}
 	addRoute := func(route client.Object, hostnames []gatewayapis.Hostname) {
 		if hostnames == nil {
 			hostnames = []gatewayapis.Hostname{}
@@ -222,7 +216,7 @@ func (r *WrappedGatewayReconciler) GetRouteData(ctx context.Context, gateway *ap
 			group := gatewayapis.Group(gvk.Group)
 			kind := gatewayapis.Kind(gvk.Kind)
 			namespace := gatewayapis.Namespace(r.GetNamespace(route))
-			item := ListenerData{
+			item := RouteData{
 				Group:     group,
 				Hostname:  hostname,
 				Kind:      kind,
@@ -271,7 +265,7 @@ func (r *WrappedGatewayReconciler) GetRouteData(ctx context.Context, gateway *ap
 	}
 	slices.Sort(keys)
 
-	data := []ListenerData{}
+	data := []RouteData{}
 	for _, key := range keys {
 		data = append(data, dataMap[key])
 	}
