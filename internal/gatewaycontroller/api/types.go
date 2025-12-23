@@ -7,6 +7,7 @@ import (
 )
 
 // +groupName=gateway-controller.homelab-helper.benfiola.com
+// +versionName=v1
 
 var (
 	SchemeGroupVersion = schema.GroupVersion{Group: "gateway-controller.homelab-helper.benfiola.com", Version: "v1"}
