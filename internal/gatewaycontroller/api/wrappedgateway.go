@@ -31,7 +31,7 @@ type WrappedGateway struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata"`
 	Spec              WrappedGatewaySpec   `json:"spec"`
-	Status            WrappedGatewayStatus `json:"status"`
+	Status            WrappedGatewayStatus `json:"status,omitempty"`
 }
 
 // +kubebuilder:object:generate=true
