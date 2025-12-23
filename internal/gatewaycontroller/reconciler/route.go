@@ -14,12 +14,12 @@ import (
 
 	"github.com/benfiola/homelab-helper/internal/gatewaycontroller/api"
 	"github.com/benfiola/homelab-helper/internal/logging"
-	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	controllerruntime "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	gatewayapis "sigs.k8s.io/gateway-api/apis/v1"
 	gatewayapisv1a2 "sigs.k8s.io/gateway-api/apis/v1alpha2"
 )
@@ -30,14 +30,15 @@ type RouteReconciler struct {
 }
 
 func (r *RouteReconciler) Register(manager controllerruntime.Manager) error {
-	resources := []client.Object{
-		&gatewayapis.GRPCRoute{},
-		&gatewayapis.HTTPRoute{},
-		&gatewayapisv1a2.TLSRoute{},
+	type Adapter reconcile.TypedReconciler[controllerruntime.Request]
+	adapters := map[client.Object]Adapter{
+		&gatewayapis.GRPCRoute{}:    &GRPCRouteReconcilerAdapter{RouteReconciler: r},
+		&gatewayapis.HTTPRoute{}:    &HTTPRouteReconcilerAdapter{RouteReconciler: r},
+		&gatewayapisv1a2.TLSRoute{}: &TLSRouteReconcilerAdapter{RouteReconciler: r},
 	}
 
-	for _, resource := range resources {
-		err := controllerruntime.NewControllerManagedBy(manager).For(resource).Complete(r)
+	for route, adapter := range adapters {
+		err := controllerruntime.NewControllerManagedBy(manager).For(route).Complete(adapter)
 		if err != nil {
 			return err
 		}
@@ -207,38 +208,65 @@ func (r *RouteReconciler) ReconcileRoute(ctx context.Context, route client.Objec
 	return controllerruntime.Result{}, nil
 }
 
-func (r *RouteReconciler) Reconcile(pctx context.Context, request controllerruntime.Request) (controllerruntime.Result, error) {
+type HTTPRouteReconcilerAdapter struct {
+	*RouteReconciler
+}
+
+func (r *HTTPRouteReconcilerAdapter) Reconcile(pctx context.Context, request controllerruntime.Request) (controllerruntime.Result, error) {
 	logger := logging.FromContext(pctx).With("resource", request.NamespacedName)
 	ctx := logging.WithLogger(pctx, logger)
 
-	u := unstructured.Unstructured{}
-	err := r.Get(ctx, request.NamespacedName, &u)
+	route := gatewayapis.HTTPRoute{}
+	err := r.Get(ctx, request.NamespacedName, &route)
 	if err != nil {
 		if client.IgnoreNotFound(err) == nil {
 			return controllerruntime.Result{}, nil
 		}
-		logger.Error("failed to fetch route", "error", err)
+		logger.Error("failed to fetch http route", "error", err)
 		return controllerruntime.Result{}, err
 	}
 
-	gvk := u.GroupVersionKind()
-	obj, err := r.Scheme.New(gvk)
+	return r.ReconcileRoute(ctx, &route)
+}
+
+type GRPCRouteReconcilerAdapter struct {
+	*RouteReconciler
+}
+
+func (r *GRPCRouteReconcilerAdapter) Reconcile(pctx context.Context, request controllerruntime.Request) (controllerruntime.Result, error) {
+	logger := logging.FromContext(pctx).With("resource", request.NamespacedName)
+	ctx := logging.WithLogger(pctx, logger)
+
+	route := gatewayapis.GRPCRoute{}
+	err := r.Get(ctx, request.NamespacedName, &route)
 	if err != nil {
-		logger.Error("unknown gvk", "error", err, "gvk", gvk.String())
-		return controllerruntime.Result{}, nil
+		if client.IgnoreNotFound(err) == nil {
+			return controllerruntime.Result{}, nil
+		}
+		logger.Error("failed to fetch grpc route", "error", err)
+		return controllerruntime.Result{}, err
 	}
 
-	err = runtime.DefaultUnstructuredConverter.FromUnstructured(u.Object, obj)
+	return r.ReconcileRoute(ctx, &route)
+}
+
+type TLSRouteReconcilerAdapter struct {
+	*RouteReconciler
+}
+
+func (r *TLSRouteReconcilerAdapter) Reconcile(pctx context.Context, request controllerruntime.Request) (controllerruntime.Result, error) {
+	logger := logging.FromContext(pctx).With("resource", request.NamespacedName)
+	ctx := logging.WithLogger(pctx, logger)
+
+	route := gatewayapisv1a2.TLSRoute{}
+	err := r.Get(ctx, request.NamespacedName, &route)
 	if err != nil {
-		logger.Error("failed to convert unstructured route", "error", err, "gvk", gvk.String())
-		return controllerruntime.Result{}, nil
+		if client.IgnoreNotFound(err) == nil {
+			return controllerruntime.Result{}, nil
+		}
+		logger.Error("failed to fetch tls route", "error", err)
+		return controllerruntime.Result{}, err
 	}
 
-	route, ok := obj.(client.Object)
-	if !ok {
-		logger.Error("route does not implement client.Object", "gvk", gvk.String())
-		return controllerruntime.Result{}, nil
-	}
-
-	return r.ReconcileRoute(ctx, route)
+	return r.ReconcileRoute(ctx, &route)
 }
