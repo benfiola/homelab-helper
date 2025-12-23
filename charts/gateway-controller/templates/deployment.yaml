@@ -19,7 +19,7 @@ spec:
           livenessProbe:
             httpGet:
               path: /healthz
-              port: metrics
+              port: health
             initialDelaySeconds: 15
             periodSeconds: 20
           image: ghcr.io/benfiola/homelab-helper:{{ .Values.deployment.image.tag | default (trimPrefix "v" .Chart.Version) }}
@@ -27,6 +27,8 @@ spec:
           ports:
             - name: metrics
               containerPort: 8080
+            - name: health
+              containerPort: 8081
           readinessProbe:
             httpGet:
               path: /readyz

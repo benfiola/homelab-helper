@@ -39,7 +39,7 @@ func main() {
 					&cli.StringFlag{
 						Name:    "health-address",
 						Sources: cli.EnvVars("HEALTH_ADDRESS"),
-						Value:   ":8080",
+						Value:   ":8081",
 					},
 					&cli.BoolFlag{
 						Name:    "leader-election",
