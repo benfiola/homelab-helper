@@ -28,6 +28,7 @@ func Run() error {
 	}
 
 	data["version"] = version
+	data["appVersion"] = version
 
 	contents, err = yaml.Marshal(data)
 	if err != nil {

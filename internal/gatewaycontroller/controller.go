@@ -13,16 +13,19 @@ import (
 
 type Opts struct {
 	LeaderElection bool
+	HealthAddress  string
 	MetricsAddress string
 }
 
 type Controller struct {
+	HealthAddress  string
 	LeaderElection bool
 	MetricsAddress string
 }
 
 func New(opts *Opts) (*Controller, error) {
 	controller := Controller{
+		HealthAddress:  opts.HealthAddress,
 		LeaderElection: opts.LeaderElection,
 		MetricsAddress: opts.MetricsAddress,
 	}
@@ -49,13 +52,12 @@ func (c *Controller) Run(ctx context.Context) error {
 
 	logger.Info("creating controller manager")
 	manager, err := controllerruntime.NewManager(config, controllerruntime.Options{
-		BaseContext: func() context.Context { return ctx },
-		Scheme:      scheme,
-		Metrics: server.Options{
-			BindAddress: c.MetricsAddress,
-		},
-		LeaderElection:   c.LeaderElection,
-		LeaderElectionID: "gateway-controller.homelab-helper.benfiola.com",
+		BaseContext:            func() context.Context { return ctx },
+		HealthProbeBindAddress: c.HealthAddress,
+		Metrics:                server.Options{BindAddress: c.MetricsAddress},
+		LeaderElection:         c.LeaderElection,
+		LeaderElectionID:       "gateway-controller.homelab-helper.benfiola.com",
+		Scheme:                 scheme,
 	})
 	if err != nil {
 		logger.Error("failed to create controller manager", "error", err)

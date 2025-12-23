@@ -36,21 +36,28 @@ func main() {
 			{
 				Name: "gateway-run-controller",
 				Flags: []cli.Flag{
+					&cli.StringFlag{
+						Name:    "health-address",
+						Sources: cli.EnvVars("HEALTH_ADDRESS"),
+						Value:   ":8080",
+					},
 					&cli.BoolFlag{
 						Name:    "leader-election",
 						Sources: cli.EnvVars("LEADER_ELECTION"),
 					},
 					&cli.StringFlag{
-						Name:    "metrics-addr",
-						Sources: cli.EnvVars("METRICS_ADDR"),
+						Name:    "metrics-address",
+						Sources: cli.EnvVars("METRICS_ADDRESS"),
 						Value:   ":8080",
 					},
 				},
 				Action: func(ctx context.Context, c *cli.Command) error {
+					healthAddress := c.String("health-address")
 					leaderElection := c.Bool("leader-election")
 					metricsAddress := c.String("metrics-address")
 
 					controller, err := gatewaycontroller.New(&gatewaycontroller.Opts{
+						HealthAddress:  healthAddress,
 						LeaderElection: leaderElection,
 						MetricsAddress: metricsAddress,
 					})

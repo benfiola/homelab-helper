@@ -1,32 +1,50 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ include "gateway-controller.fullname" . }}
-  labels:
-  {{- include "gateway-controller.labels" . | nindent 4 }}
+  name: {{ include "gateway-controller.name" . }}
 spec:
   selector:
     matchLabels:
       app: gateway-controller
-    {{- include "gateway-controller.selectorLabels" . | nindent 6 }}
+  replicas: {{ .Values.deployment.replicas }}
   template:
     metadata:
       labels:
         app: gateway-controller
-      {{- include "gateway-controller.selectorLabels" . | nindent 8 }}
     spec:
       containers:
-      - args: {{- toYaml .Values.gatewayController.args | nindent 8 }}
-        env:
-        - name: KUBERNETES_CLUSTER_DOMAIN
-          value: {{ quote .Values.kubernetesClusterDomain }}
-        image: {{ .Values.gatewayController.image.repository }}:{{ .Values.gatewayController.image.tag
-          | default .Chart.AppVersion }}
-        name: gateway-controller
-        resources: {}
-      imagePullSecrets: {{ .Values.imagePullSecrets | default list | toJson }}
-      nodeSelector: {{- toYaml .Values.gatewayController.nodeSelector | nindent 8 }}
-      serviceAccountName: {{ include "gateway-controller.serviceAccountName" . }}
-      tolerations: {{- toYaml .Values.gatewayController.tolerations | nindent 8 }}
-      topologySpreadConstraints: {{- toYaml .Values.gatewayController.topologySpreadConstraints
-        | nindent 8 }}
+        - args:
+            - homelab-helper
+            - gateway-run-controller
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: metrics
+            initialDelaySeconds: 15
+            periodSeconds: 20
+          image: ghcr.io/benfiola/homelab-helper:{{ .Values.deployment.image.tag | default .Chart.AppVersion }}
+          name: gateway-controller
+          ports:
+            - name: metrics
+              containerPort: 8080
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: metrics
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          {{- if .Values.deployment.resources }}
+          resources: {{ .Values.deployment.resources | toYaml | nindent 10 }}
+          {{- end }}          
+          securityContext:
+            seccompProfile:
+              type: RuntimeDefault
+            runAsGroup: 1000
+            allowPrivilegeEscalation: false
+            runAsUser: 1000
+            runAsNonRoot: true
+            capabilities:
+              drop:
+                - ALL
+            privileged: false
+      serviceAccountName: {{ include "gateway-controller.name" . }}
