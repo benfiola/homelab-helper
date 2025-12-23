@@ -2,6 +2,17 @@ apiVersion: v1
 entries:
   gateway-controller:
   - apiVersion: v2
+    appVersion: v0.8.10
+    created: "2025-12-23T19:53:14.366303365Z"
+    description: A helm chart that deploys a gateway controller used to dynamically
+      update gateway resources with hostnames from attached routes.
+    digest: 9353c7e66e53becce02eb35d0ffa0f373021a7bd0d22af1cf79689f185b6fcb8
+    name: gateway-controller
+    type: application
+    urls:
+    - https://github.com/benfiola/homelab-helper/releases/download/v0.8.10/gateway-controller-v0.8.10.tgz
+    version: v0.8.10
+  - apiVersion: v2
     appVersion: v0.8.9
     created: "2025-12-23T19:39:56.787448351Z"
     description: A helm chart that deploys a gateway controller used to dynamically
@@ -168,6 +179,17 @@ entries:
     version: v0.6.37
   vault-push-secrets:
   - apiVersion: v2
+    appVersion: v0.8.10
+    created: "2025-12-23T19:53:14.539349155Z"
+    description: A helm chart that deploys a workload capable of dumping vault secrets
+      and pushing them to cloud storage
+    digest: adb118eaecb9082dac98a1013d0cb93815963e75a3a01956de781a22e89d54fd
+    name: vault-push-secrets
+    type: application
+    urls:
+    - https://github.com/benfiola/homelab-helper/releases/download/v0.8.10/vault-push-secrets-v0.8.10.tgz
+    version: v0.8.10
+  - apiVersion: v2
     appVersion: v0.8.9
     created: "2025-12-23T19:39:56.899286105Z"
     description: A helm chart that deploys a workload capable of dumping vault secrets
@@ -266,4 +288,4 @@ entries:
     urls:
     - https://github.com/benfiola/homelab-helper/releases/download/v0.8.1/vault-push-secrets-v0.8.1.tgz
     version: v0.8.1
-generated: "2025-12-23T19:39:56.899508522Z"
+generated: "2025-12-23T19:53:14.539491428Z"
