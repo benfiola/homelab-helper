@@ -5,34 +5,31 @@ import (
 	gatewayapis "sigs.k8s.io/gateway-api/apis/v1"
 )
 
+// +kubebuilder:object:generate=true
+type ListenerTemplate struct {
+	Port     gatewayapis.PortNumber        `json:"port"`
+	Protocol gatewayapis.ProtocolType      `json:"protocol"`
+	TLS      *gatewayapis.GatewayTLSConfig `json:"tls,omitempty"`
+}
+
+// +kubebuilder:object:generate=true
 type WrappedGatewaySpec struct {
-	gatewayapis.GatewaySpec `json:",inline"`
+	Addresses        []gatewayapis.GatewaySpecAddress   `json:"addresses,omitempty"`
+	AllowedListeners *gatewayapis.AllowedListeners      `json:"allowedListeners,omitempty"`
+	BackendTLS       *gatewayapis.GatewayBackendTLS     `json:"backendTLS,omitempty"`
+	GatewayClassName gatewayapis.ObjectName             `json:"gatewayClassName"`
+	Infrastructure   *gatewayapis.GatewayInfrastructure `json:"infrastructure,omitempty"`
 	// +kubebuilder:validation:Required
-	ListenerTemplate gatewayapis.Listener `json:"listenerTemplate"`
+	ListenerTemplate ListenerTemplate `json:"listenerTemplate"`
 }
 
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
 type WrappedGateway struct {
 	metav1.TypeMeta   `json:",inline"`
-	metav1.ObjectMeta `json:"metadata,omitempty"`
+	metav1.ObjectMeta `json:"metadata"`
 	Spec              WrappedGatewaySpec   `json:"spec"`
 	Status            WrappedGatewayStatus `json:"status"`
-}
-
-func (in *WrappedGatewaySpec) DeepCopyInto(out *WrappedGatewaySpec) {
-	*out = *in
-	in.GatewaySpec.DeepCopyInto(&out.GatewaySpec)
-	in.ListenerTemplate.DeepCopyInto(&out.ListenerTemplate)
-}
-
-func (in *WrappedGatewaySpec) DeepCopy() *WrappedGatewaySpec {
-	if in == nil {
-		return nil
-	}
-	out := new(WrappedGatewaySpec)
-	in.DeepCopyInto(out)
-	return out
 }
 
 // +kubebuilder:object:generate=true

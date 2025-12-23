@@ -11,10 +11,12 @@ import (
 	"context"
 	"fmt"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/benfiola/homelab-helper/internal/gatewaycontroller/api"
 	"github.com/benfiola/homelab-helper/internal/logging"
+	"github.com/benfiola/homelab-helper/internal/ptr"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -76,9 +78,13 @@ func (r *WrappedGatewayReconciler) Reconcile(pctx context.Context, request contr
 		}
 	}
 
-	spec := gatewayapis.GatewaySpec{}
-	wgateway.Spec.GatewaySpec.DeepCopyInto(&spec)
-	spec.Listeners = []gatewayapis.Listener{}
+	spec := gatewayapis.GatewaySpec{
+		Addresses:        wgateway.Spec.Addresses,
+		BackendTLS:       wgateway.Spec.BackendTLS,
+		GatewayClassName: wgateway.Spec.GatewayClassName,
+		Infrastructure:   wgateway.Spec.Infrastructure,
+		Listeners:        []gatewayapis.Listener{},
+	}
 
 	create := false
 	gateway := gatewayapis.Gateway{}
@@ -101,30 +107,47 @@ func (r *WrappedGatewayReconciler) Reconcile(pctx context.Context, request contr
 	gateway.Labels = wgateway.Labels
 	gateway.Spec = spec
 
-	hostnames, err := r.GetListenerHostnames(ctx, &wgateway)
+	routes, err := r.GetRouteData(ctx, &wgateway)
 	if err != nil {
-		logger.Error("failed to get listener hostnames", "error", err)
+		logger.Error("failed to get route data", "error", err)
 		r.setCondition(&wgateway, ReasonRoutesFetchFailed, err.Error())
 		r.Status().Update(ctx, &wgateway)
 		return controllerruntime.Result{}, err
 	}
 
-	for index, hostname := range hostnames {
-		listener := gatewayapis.Listener{}
-		wgateway.Spec.ListenerTemplate.DeepCopyInto(&listener)
-
-		listener.Name = gatewayapis.SectionName(fmt.Sprintf("listener-%d", index))
-
-		ghostname := gatewayapis.Hostname(hostname)
-		listener.Hostname = &ghostname
-
+	for index, route := range routes {
+		allowedRoutes := &gatewayapis.AllowedRoutes{
+			Namespaces: &gatewayapis.RouteNamespaces{
+				From: ptr.Get(gatewayapis.NamespacesFromSelector),
+				Selector: &metav1.LabelSelector{
+					MatchLabels: map[string]string{
+						"kubernetes.io/metadata.name": string(route.Namespace),
+					},
+				},
+			},
+			Kinds: []gatewayapis.RouteGroupKind{
+				{
+					Group: ptr.Get(route.Group),
+					Kind:  route.Kind,
+				},
+			},
+		}
+		name := gatewayapis.SectionName(fmt.Sprintf("listener-%d", index))
+		listener := gatewayapis.Listener{
+			AllowedRoutes: allowedRoutes,
+			Name:          name,
+			Hostname:      ptr.Get(route.Hostname),
+			Port:          wgateway.Spec.ListenerTemplate.Port,
+			Protocol:      wgateway.Spec.ListenerTemplate.Protocol,
+			TLS:           wgateway.Spec.ListenerTemplate.TLS,
+		}
 		gateway.Spec.Listeners = append(gateway.Spec.Listeners, listener)
 	}
 
 	if create {
 		err = r.Create(ctx, &gateway)
 		if err != nil {
-			logger.Error("failed to create gateway", "error", err, "listenerCount", len(hostnames))
+			logger.Error("failed to create gateway", "error", err, "routes", len(routes))
 			r.setCondition(&wgateway, ReasonGatewaySyncFailed, err.Error())
 			r.Status().Update(ctx, &wgateway)
 			return controllerruntime.Result{}, err
@@ -132,14 +155,14 @@ func (r *WrappedGatewayReconciler) Reconcile(pctx context.Context, request contr
 	} else {
 		err = r.Update(ctx, &gateway)
 		if err != nil {
-			logger.Error("failed to update gateway", "error", err, "listenerCount", len(hostnames))
+			logger.Error("failed to update gateway", "error", err, "routes", len(routes))
 			r.setCondition(&wgateway, ReasonGatewaySyncFailed, err.Error())
 			r.Status().Update(ctx, &wgateway)
 			return controllerruntime.Result{}, err
 		}
 	}
 
-	logger.Info("synced gateway", "listenerCount", len(hostnames))
+	logger.Info("synced gateway", "routes", len(routes))
 	wgateway.Status.ObservedGeneration = wgateway.Generation
 	wgateway.Status.LastReconciledTime = &metav1.Time{Time: time.Now()}
 	r.setCondition(&wgateway, ReasonReconciliationSucceeded, "")
@@ -154,10 +177,60 @@ func (r *WrappedGatewayReconciler) Reconcile(pctx context.Context, request contr
 	return controllerruntime.Result{}, nil
 }
 
-func (r *WrappedGatewayReconciler) GetListenerHostnames(ctx context.Context, gateway *api.WrappedGateway) ([]string, error) {
+func (r *WrappedGatewayReconciler) GetNamespace(o client.Object) string {
+	namespace := o.GetNamespace()
+	if namespace == "" {
+		namespace = "default"
+	}
+	return namespace
+}
+
+type ListenerRoute struct {
+	Namespace string
+	Name      string
+	Kind      string
+}
+
+type ListenerData struct {
+	Hostname  gatewayapis.Hostname
+	Kind      gatewayapis.Kind
+	Group     gatewayapis.Group
+	Namespace gatewayapis.Namespace
+}
+
+func (d ListenerData) String() string {
+	vals := []string{
+		string(d.Hostname),
+		string(d.Namespace),
+		string(d.Group),
+		string(d.Kind),
+	}
+	val := strings.Join(vals, "/")
+	return val
+}
+
+func (r *WrappedGatewayReconciler) GetRouteData(ctx context.Context, gateway *api.WrappedGateway) ([]ListenerData, error) {
 	logger := logging.FromContext(ctx)
 
-	hostnames := []gatewayapis.Hostname{}
+	dataMap := map[string]ListenerData{}
+	addRoute := func(route client.Object, hostnames []gatewayapis.Hostname) {
+		if hostnames == nil {
+			hostnames = []gatewayapis.Hostname{}
+		}
+		for _, hostname := range hostnames {
+			gvk := route.GetObjectKind().GroupVersionKind()
+			group := gatewayapis.Group(gvk.Group)
+			kind := gatewayapis.Kind(gvk.Kind)
+			namespace := gatewayapis.Namespace(r.GetNamespace(route))
+			item := ListenerData{
+				Group:     group,
+				Hostname:  hostname,
+				Kind:      kind,
+				Namespace: namespace,
+			}
+			dataMap[item.String()] = item
+		}
+	}
 
 	httpRoutes := gatewayapis.HTTPRouteList{}
 	if err := r.List(ctx, &httpRoutes); err != nil {
@@ -166,7 +239,7 @@ func (r *WrappedGatewayReconciler) GetListenerHostnames(ctx context.Context, gat
 	}
 	for _, route := range httpRoutes.Items {
 		if r.routeReferencesGateway(&route, gateway) {
-			hostnames = append(hostnames, route.Spec.Hostnames...)
+			addRoute(&route, route.Spec.Hostnames)
 		}
 	}
 
@@ -175,9 +248,9 @@ func (r *WrappedGatewayReconciler) GetListenerHostnames(ctx context.Context, gat
 		logger.Error("failed to list TLSRoutes", "error", err)
 		return nil, err
 	}
-	for _, route := range tlsRoutes.Items {
+	for _, route := range httpRoutes.Items {
 		if r.routeReferencesGateway(&route, gateway) {
-			hostnames = append(hostnames, route.Spec.Hostnames...)
+			addRoute(&route, route.Spec.Hostnames)
 		}
 	}
 
@@ -186,29 +259,24 @@ func (r *WrappedGatewayReconciler) GetListenerHostnames(ctx context.Context, gat
 		logger.Error("failed to list GRPCRoutes", "error", err)
 		return nil, err
 	}
-	for _, route := range grpcRoutes.Items {
+	for _, route := range httpRoutes.Items {
 		if r.routeReferencesGateway(&route, gateway) {
-			hostnames = append(hostnames, route.Spec.Hostnames...)
+			addRoute(&route, route.Spec.Hostnames)
 		}
 	}
 
-	hostnameStrMap := map[string]bool{}
-	for _, hostname := range hostnames {
-		hostnameStr := string(hostname)
-		if hostnameStr == "" {
-			continue
-		}
-		hostnameStrMap[hostnameStr] = true
+	keys := []string{}
+	for key := range dataMap {
+		keys = append(keys, key)
+	}
+	slices.Sort(keys)
+
+	data := []ListenerData{}
+	for _, key := range keys {
+		data = append(data, dataMap[key])
 	}
 
-	hostnameStrs := []string{}
-	for hostnameStr := range hostnameStrMap {
-		hostnameStrs = append(hostnameStrs, hostnameStr)
-	}
-
-	slices.Sort(hostnameStrs)
-
-	return hostnameStrs, nil
+	return data, nil
 }
 
 func (r *WrappedGatewayReconciler) routeReferencesGateway(route client.Object, gateway *api.WrappedGateway) bool {
