@@ -4,6 +4,7 @@ config:
   role: ""
   secretsPath: ""
   storagePath: ""
+  storageCredentialsKey: ""
   storageCredentialsSecret: ""
 deployment:
   image:

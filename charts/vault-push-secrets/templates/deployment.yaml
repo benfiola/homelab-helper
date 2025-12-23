@@ -71,5 +71,5 @@ spec:
           secret:
             secretName: {{ required "config.storageCredentialsSecret is required" .Values.config.storageCredentialsSecret  }}
             items:
-              - key: credentials
+              - key: {{ required "config.storageCredentialsKey is required" .Values.config.storageCredentialsKey  }}
                 path: credentials
