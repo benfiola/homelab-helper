@@ -66,16 +66,20 @@ jobs:
           args: release --clean
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      - name: package helm chart
+      - name: package helm charts
         run: |
-          go run ./scripts/set-helm-version ./charts/gateway-controller "${{ steps.version.outputs.version }}"
-          helm package ./charts/gateway-controller
+          mkdir -p dist/helm
+          for chart in gateway-controller vault-push-secrets; do
+            echo "packaging chart: ${chart}"
+            go run ./scripts/set-helm-version "./charts/${chart}" "${{ steps.version.outputs.version }}"
+            helm package "./charts/${chart}" -d ./dist/helm
+          done
       - name: update release with helm chart
         uses: softprops/action-gh-release@v2
         with:
           fail_on_unmatched_files: true
           files: |
-            gateway-controller-${{ steps.version.outputs.version }}.tgz
+            ./dist/helm/*-${{ steps.version.outputs.version }}.tgz
           tag_name: "${{ steps.version.outputs.version }}"
       - name: run chart-releaser
         uses: helm/chart-releaser-action@v1.6.0
