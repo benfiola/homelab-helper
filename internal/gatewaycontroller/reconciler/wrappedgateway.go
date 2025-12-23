@@ -2,7 +2,7 @@ package reconciler
 
 // +kubebuilder:rbac:groups=gateway-controller.homelab-helper.benfiola.com,resources=wrappedgateways,verbs=get;list;watch
 // +kubebuilder:rbac:groups=gateway-controller.homelab-helper.benfiola.com,resources=wrappedgateways/status,verbs=get;patch;update
-// +kubebuilder:rbac:groups=gateway.networking.k8s.io,resources=gateways,verbs=create;get;list;patch;update
+// +kubebuilder:rbac:groups=gateway.networking.k8s.io,resources=gateways,verbs=create;get;list;patch;update;watch
 // +kubebuilder:rbac:groups=gateway.networking.k8s.io,resources=httproutes,verbs=get;list
 // +kubebuilder:rbac:groups=gateway.networking.k8s.io,resources=grpcroutes,verbs=get;list
 // +kubebuilder:rbac:groups=gateway.networking.k8s.io,resources=tlsroutes,verbs=get;list
