@@ -29,7 +29,7 @@ spec:
               value: {{ required "config.storagePath is required" .Values.config.storagePath }}
             - name: STORAGE_CREDENTIALS_PATH
               value: /storage-secrets/credentials
-          image: ghcr.io/benfiola/homelab-helper:{{ .Values.deployment.image.tag | default .Chart.AppVersion }}
+          image: ghcr.io/benfiola/homelab-helper:{{ .Values.deployment.image.tag | default (trimPrefix "v" .Chart.Version) }}
           livenessProbe:
             exec:
               command:

@@ -22,7 +22,7 @@ spec:
               port: metrics
             initialDelaySeconds: 15
             periodSeconds: 20
-          image: ghcr.io/benfiola/homelab-helper:{{ .Values.deployment.image.tag | default .Chart.AppVersion }}
+          image: ghcr.io/benfiola/homelab-helper:{{ .Values.deployment.image.tag | default (trimPrefix "v" .Chart.Version) }}
           name: controller
           ports:
             - name: metrics
