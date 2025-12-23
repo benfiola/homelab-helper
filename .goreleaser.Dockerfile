@@ -9,7 +9,7 @@ FROM ghcr.io/benfiola/homelab-lvm:0.1.1 AS lvm2_builder
 FROM debian:bookworm-slim
 RUN <<EOF
 apt -y update
-apt -y install curl jq tar thin-provisioning-tools vim
+apt -y install curl jq procps tar thin-provisioning-tools vim
 EOF
 
 COPY --from=lvm2_builder /archive.tar.gz /tmp/archive.tar.gz
