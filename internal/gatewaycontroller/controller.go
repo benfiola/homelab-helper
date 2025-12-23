@@ -2,14 +2,18 @@ package gatewaycontroller
 
 import (
 	"context"
+	"fmt"
+	"net/http"
 
 	"github.com/benfiola/homelab-helper/internal/gatewaycontroller/reconciler"
 	"github.com/benfiola/homelab-helper/internal/gatewaycontroller/scheme"
 	"github.com/benfiola/homelab-helper/internal/logging"
+	"github.com/go-logr/logr"
 	"k8s.io/client-go/tools/clientcmd"
 	controllerruntime "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/metrics/server"
+	"sigs.k8s.io/controller-runtime/pkg/webhook"
 )
 
 type Opts struct {
@@ -37,6 +41,10 @@ func New(opts *Opts) (*Controller, error) {
 func (c *Controller) Run(ctx context.Context) error {
 	logger := logging.FromContext(ctx)
 
+	logger.Info("setting controller-runtime logger")
+	crLogger := logr.FromSlogHandler(logger.Handler()).WithName("controller-runtime")
+	controllerruntime.SetLogger(crLogger)
+
 	logger.Info("getting configuration")
 	config, err := clientcmd.BuildConfigFromFlags("", "")
 	if err != nil {
@@ -52,12 +60,14 @@ func (c *Controller) Run(ctx context.Context) error {
 	}
 
 	logger.Info("creating controller manager")
+	webhookServer := webhook.NewServer(webhook.Options{Port: 0})
 	manager, err := controllerruntime.NewManager(config, controllerruntime.Options{
 		BaseContext:            func() context.Context { return ctx },
 		HealthProbeBindAddress: c.HealthAddress,
-		Metrics:                server.Options{BindAddress: c.MetricsAddress},
 		LeaderElection:         c.LeaderElection,
 		LeaderElectionID:       "gateway-controller.homelab-helper.benfiola.com",
+		Metrics:                server.Options{BindAddress: c.MetricsAddress},
+		WebhookServer:          webhookServer,
 		Scheme:                 scheme,
 	})
 	if err != nil {
@@ -84,7 +94,15 @@ func (c *Controller) Run(ctx context.Context) error {
 	if err != nil {
 		logger.Error("failed to setup liveness probe", "error", err)
 	}
-	err = manager.AddReadyzCheck("webhook", manager.GetWebhookServer().StartedChecker())
+	readyz := func(req *http.Request) error {
+		val := manager.GetCache().WaitForCacheSync(req.Context())
+		if !val {
+			logger.Warn("readyz cache sync check failed")
+			return fmt.Errorf("readyz cache sync check failed")
+		}
+		return nil
+	}
+	err = manager.AddReadyzCheck("caches", readyz)
 	if err != nil {
 		logger.Error("failed to setup readiness probe", "error", err)
 	}
