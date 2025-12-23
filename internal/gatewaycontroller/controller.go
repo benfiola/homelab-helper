@@ -8,6 +8,7 @@ import (
 	"github.com/benfiola/homelab-helper/internal/logging"
 	"k8s.io/client-go/tools/clientcmd"
 	controllerruntime "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/metrics/server"
 )
 
@@ -76,6 +77,16 @@ func (c *Controller) Run(ctx context.Context) error {
 			logger.Error("failed to register reconciler", "error", err, "index", index)
 			return err
 		}
+	}
+
+	logger.Info("adding probes")
+	err = manager.AddHealthzCheck("ping", healthz.Ping)
+	if err != nil {
+		logger.Error("failed to setup liveness probe", "error", err)
+	}
+	err = manager.AddReadyzCheck("webhook", manager.GetWebhookServer().StartedChecker())
+	if err != nil {
+		logger.Error("failed to setup readiness probe", "error", err)
 	}
 
 	logger.Info("starting controller")

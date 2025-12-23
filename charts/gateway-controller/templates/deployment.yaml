@@ -32,7 +32,7 @@ spec:
           readinessProbe:
             httpGet:
               path: /readyz
-              port: metrics
+              port: health
             initialDelaySeconds: 5
             periodSeconds: 10
           {{- if .Values.deployment.resources }}
