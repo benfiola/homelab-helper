@@ -1,0 +1,13 @@
+config:
+  address: ""
+  logLevel: "info"
+  role: ""
+  secretsPath: ""
+  storagePath: ""
+  storageCredentialsSecret: ""
+deployment:
+  image:
+    tag: ""
+  resources: {}
+serviceAccount:
+  name: ""

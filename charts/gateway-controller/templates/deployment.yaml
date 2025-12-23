@@ -23,7 +23,7 @@ spec:
             initialDelaySeconds: 15
             periodSeconds: 20
           image: ghcr.io/benfiola/homelab-helper:{{ .Values.deployment.image.tag | default .Chart.AppVersion }}
-          name: gateway-controller
+          name: controller
           ports:
             - name: metrics
               containerPort: 8080

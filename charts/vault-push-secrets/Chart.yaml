@@ -1,0 +1,6 @@
+apiVersion: v2
+name: vault-push-secrets
+description: A helm chart that deploys a workload capable of dumping vault secrets and pushing them to cloud storage
+type: application
+version: 0.0.0
+appVersion: "0.0.0"

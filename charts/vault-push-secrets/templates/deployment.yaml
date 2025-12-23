@@ -1,0 +1,75 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "vault-push-secrets.name" . }}
+spec:
+  selector:
+    matchLabels:
+      app: vault-push-secrets
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        app: vault-push-secrets
+    spec:
+      containers:
+        - args:
+            - homelab-helper
+            - vault-push-secrets
+          env:
+            - name: ADDRESS
+              value: {{ required "config.address is required" .Values.config.address }}
+            - name: LOG_LEVEL
+              value: {{ .Values.config.logLevel }}
+            - name: ROLE
+              value: {{ required "config.role is required" .Values.config.role }}
+            - name: SECRETS_PATH
+              value: {{ required "config.secretsPath is required" .Values.config.secretsPath }}
+            - name: STORAGE_PATH
+              value: {{ required "config.storagePath is required" .Values.config.storagePath }}
+            - name: STORAGE_CREDENTIALS_PATH
+              value: /storage-secrets/credentials
+          image: ghcr.io/benfiola/homelab-helper:{{ .Values.deployment.image.tag | default .Chart.AppVersion }}
+          livenessProbe:
+            exec:
+              command:
+                - /bin/sh
+                - -c
+                - pgrep -f "vault-push-secrets" > /dev/null
+            initialDelaySeconds: 10
+            periodSeconds: 30
+            failureThreshold: 3
+          name: pusher
+          readinessProbe:
+            exec:
+              command:
+                - /bin/sh
+                - -c
+                - pgrep -f "vault-push-secrets" > /dev/null
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          {{- if .Values.deployment.resources }}
+          resources: {{ .Values.deployment.resources | toYaml | nindent 10 }}
+          {{- end }}          
+          securityContext:
+            seccompProfile:
+              type: RuntimeDefault
+            runAsGroup: 1000
+            allowPrivilegeEscalation: false
+            runAsUser: 1000
+            runAsNonRoot: true
+            capabilities:
+              drop:
+                - ALL
+            privileged: false
+          volumeMounts:
+            - name: storage-secrets
+              mountPath: /storage-secrets
+      serviceAccountName: {{ include "vault-push-secrets.serviceAccountName" . }}
+      volumes:
+        - name: storage-secrets
+          secret:
+            secretName: {{ required "config.storageCredentialsSecret is required" .Values.config.storageCredentialsSecret  }}
+            items:
+              - key: credentials
+                path: credentials
